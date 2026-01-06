@@ -2,6 +2,7 @@ const express = require("express");
 const UrlController = require("../controllers/urlController");
 const { authenticateToken, optionalAuth } = require("../middleware/auth");
 const { requireAdmin, canModifyResource } = require("../middleware/rbac");
+const handleValidationErrors = require("../middleware/validation");
 const {
   urlCreationLimiter,
   urlAccessLimiter,
@@ -12,8 +13,12 @@ const {
 const {
   validateUrlCreation,
   validateShortCode,
-  validatePagination,
+  validateBulkDelete,
 } = require("../request/validators/auth-validators");
+
+const {
+  validatePagination,
+} = require("../request/validators/pagination-validators");
 
 const router = express.Router();
 
@@ -27,6 +32,7 @@ router.post(
   authenticateToken,
   urlCreationLimiter,
   validateUrlCreation,
+  handleValidationErrors,
   UrlController.createShortUrl
 );
 
@@ -40,6 +46,7 @@ router.get(
   authenticateToken,
   generalLimiter,
   validatePagination,
+  handleValidationErrors,
   UrlController.getUserUrls
 );
 
@@ -77,6 +84,8 @@ router.delete(
   "/bulk-delete",
   authenticateToken,
   bulkOperationsLimiter,
+  validateBulkDelete,
+  handleValidationErrors,
   UrlController.bulkDeleteUrls
 );
 
@@ -89,6 +98,7 @@ router.delete(
   "/:id",
   authenticateToken,
   generalLimiter,
+  canModifyResource(require("../models/Url")),
   UrlController.deleteUrl
 );
 
@@ -101,6 +111,7 @@ router.patch(
   "/:id/toggle",
   authenticateToken,
   generalLimiter,
+  canModifyResource(require("../models/Url")),
   UrlController.toggleUrlStatus
 );
 

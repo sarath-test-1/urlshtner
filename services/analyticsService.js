@@ -222,7 +222,7 @@ class AnalyticsService {
           ? `analytics:admin:${startDate}:${endDate}`
           : `analytics:admin:all`;
 
-      // 1️⃣ Try cache first
+      // Try cache first
       if (redisClient) {
         try {
           const cached = await redisClient.get(cacheKey);
@@ -469,7 +469,7 @@ class AnalyticsService {
         },
       };
 
-      // 3️⃣ Store in cache
+      // Store in cache
       if (redisClient) {
         await redisClient.setEx(
           cacheKey,
@@ -482,10 +482,6 @@ class AnalyticsService {
     } catch (error) {
       throw new Error(`Failed to get admin analytics: ${error.message}`);
     }
-  }
-
-  static async _buildAdminAnalytics() {
-    //
   }
 }
 

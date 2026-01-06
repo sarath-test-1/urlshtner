@@ -44,7 +44,7 @@ class AuthController {
       await user.save();
 
       // Generate token
-      const accessToken = generateToken(user._id, "30d");
+      const accessToken = generateToken(user._id, "15m");
       const refreshToken = generateRefreshToken(user._id, "30d");
 
       // Update last login
@@ -72,10 +72,21 @@ class AuthController {
       // Remove from cache
       const redisClient = getRedisClient();
       if (redisClient) {
-        const keys = await redisClient.keys("analytics:admin:*");
-        if (keys.length) {
-          await redisClient.del(keys);
-        }
+        // Use SCAN for non-blocking iteration in production
+        let cursor = "0";
+        do {
+          const [nextCursor, keys] = await redisClient.scan(
+            cursor,
+            "MATCH",
+            "analytics:admin:*",
+            "COUNT",
+            100
+          );
+          cursor = nextCursor;
+          if (keys.length) {
+            await redisClient.del(keys);
+          }
+        } while (cursor !== "0");
       }
 
       return successResponse(
@@ -131,8 +142,7 @@ class AuthController {
       }
 
       // Generate token
-      //   const token = generateToken(user._id);
-      const accessToken = generateToken(user._id, "30d");
+      const accessToken = generateToken(user._id, "15m");
       const refreshToken = generateRefreshToken(user._id, "30d");
 
       // Update last login
@@ -178,8 +188,6 @@ class AuthController {
    */
   static async logout(req, res) {
     try {
-      // In JWT implementation, logout is typically handled client-side
-      // by removing the token. Server-side logout would require token blacklisting
       res.clearCookie("refreshToken", {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
@@ -201,8 +209,12 @@ class AuthController {
       const userId = req.userId;
       const user = req.user;
 
+      if (!userId || !user) {
+        return unauthorizedResponse(res, "Authentication required");
+      }
+
       // Generate new token
-      const newAccessToken = generateToken(userId, "30d");
+      const newAccessToken = generateToken(userId, "15m");
 
       const userResponse = {
         id: user._id,
@@ -309,6 +321,9 @@ class AuthController {
 
       const { name } = req.body || {};
       const userId = req.userId;
+      if (!userId) {
+        return unauthorizedResponse(res, "Authentication required");
+      }
 
       // Build update object
       const updateData = {};
@@ -364,6 +379,9 @@ class AuthController {
 
       const { current_password, new_password } = req.body || {};
       const userId = req.userId;
+      if (!userId) {
+        return unauthorizedResponse(res, "Authentication required");
+      }
 
       // Find user with password
       const user = await User.findById(userId).select("+password");
@@ -419,6 +437,10 @@ class AuthController {
       }
 
       const userId = req.userId;
+      if (!userId) {
+        return unauthorizedResponse(res, "Authentication required");
+      }
+
       const { password } = req.body || {};
 
       // Find user with password
@@ -436,6 +458,12 @@ class AuthController {
       // Deactivate account
       user.isActive = false;
       await user.save();
+
+      res.clearCookie("refreshToken", {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+      });
 
       return successResponse(res, null, "Account deactivated successfully");
     } catch (error) {

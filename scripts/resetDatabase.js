@@ -2,10 +2,11 @@ const mongoose = require("mongoose");
 require("dotenv").config();
 
 const resetDatabase = async () => {
+  let exitCode = 0;
   try {
     console.log("Connecting to MongoDB...");
     await mongoose.connect(
-      process.env.MONGODB_URI || "mongodb://localhost:27017/urlshortner"
+      process.env.MONGODB_URI || "mongodb://localhost:27017/url_shortener"
     );
 
     console.log("Dropping database...");
@@ -14,15 +15,14 @@ const resetDatabase = async () => {
     console.log("Database reset successfully!");
   } catch (error) {
     console.error("Error resetting database:", error.message);
-    process.exit(1);
+    exitCode = 1;
   } finally {
     await mongoose.connection.close();
     console.log("Disconnected from MongoDB");
-    process.exit(0);
+    process.exit(exitCode);
   }
 };
 
-// LEARN
 if (require.main === module) {
   resetDatabase();
 }

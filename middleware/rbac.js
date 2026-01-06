@@ -1,6 +1,8 @@
 const {
   forbiddenResponse,
   unauthorizedResponse,
+  notFoundResponse,
+  errorResponse,
 } = require("../utils/apiResponse");
 
 /**
@@ -92,13 +94,13 @@ const canModifyResource = (model, resourceIdParam = "id") => {
 
       const resourceId = req.params[resourceIdParam];
       if (!resourceId) {
-        return forbiddenResponse(res, "Resource ID is required");
+        return errorResponse(res, "Resource ID is required", 400);
       }
 
       // Find the resource
       const resource = await model.findById(resourceId);
       if (!resource) {
-        return forbiddenResponse(res, "Resource not found");
+        return notFoundResponse(res, "Resource not found");
       }
 
       // Admin can modify everything

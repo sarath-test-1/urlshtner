@@ -1,7 +1,6 @@
 const dotenv = require("dotenv");
 const path = require("path");
 
-// __dirname in Node.js is a global variable that gives the absolute path of the current file’s directory.
 dotenv.config({ path: path.join(__dirname, "./.env") });
 
 const app = require("./app");
@@ -46,52 +45,36 @@ process.on("unhandledRejection", (err, promise) => {
 });
 
 // Graceful shutdown handler
-// async
-const gracefulShutdown = (signal) => {
+const gracefulShutdown = async (signal) => {
   console.log(`\nReceived ${signal}. Starting graceful shutdown...`);
-
-  // Close Sentry client
-  //   await sentryUtils.Sentry.close(2000);
 
   if (!server) {
     console.log("Server not yet started, exiting immediately");
     process.exit(0);
   }
 
-  server.close(() => {
+  server.close(async () => {
     console.log("HTTP server closed");
 
     // Close database connections
-    const mongoose = require("mongoose");
-    mongoose.connection.close(() => {
+    try {
+      const mongoose = require("mongoose");
+      await mongoose.connection.close();
       console.log("MongoDB connection closed");
 
-      // Close Redis connection
       const { getRedisClient } = require("./config/redis");
       const redisClient = getRedisClient();
       if (redisClient) {
-        redisClient.quit(() => {
-          console.log("Redis connection closed");
-          process.exit(0);
-        });
-      } else {
-        process.exit(0);
+        await redisClient.quit();
+        console.log("Redis connection closed");
       }
-    });
+    } catch (err) {
+      console.error("Error during shutdown:", err);
+    } finally {
+      process.exit(0);
+    }
   });
 };
-
-// Step-by-step (concise):
-// * `gracefulShutdown = (signal) => { ... }` — function that receives the shutdown signal name and starts the shutdown sequence.
-// * `console.log(...)` — log which signal was received.
-// * `server.close(() => { ... })` — stop accepting new HTTP connections; wait for existing requests to finish; then run the callback.
-// * `console.log("HTTP server closed")` — confirm HTTP server stopped.
-// * `const mongoose = require("mongoose"); mongoose.connection.close(() => { ... })` — close MongoDB connections gracefully; wait for close, then run the callback.
-// * `console.log("MongoDB connection closed")` — confirm DB closed.
-// * `const { getRedisClient } = require("./config/redis"); redisClient.quit(() => { ... })` — fetch Redis client; if present, call `quit()` to close Redis connection gracefully, then run callback and log.
-// * `process.exit(0)` — once everything is closed (or if no Redis client), exit the process with success code `0`.
-// * `process.on("SIGTERM"/"SIGINT", ...)` — register handlers so those OS signals trigger the `gracefulShutdown` flow (SIGINT = Ctrl+C, SIGTERM = termination from PMs/k8s).
-// Purpose: orderly stop — let in-flight work finish and clean up DB/Redis before exiting. (Consider adding a forced timeout fallback to avoid hanging if something never closes.)
 
 // Listen for shutdown signals
 process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
@@ -102,7 +85,6 @@ const startServer = async () => {
   try {
     console.log("Starting URL Shortener Server...");
     console.log(`Environment: ${process.env.NODE_ENV}`);
-    // console.log(`Sentry: ${process.env.SENTRY_DSN ? "Enabled" : "Disabled"}`);
     // Connect to MongoDB
     console.log("Connecting to MongoDB...");
     await connectDB();
@@ -170,10 +152,10 @@ const cleanupExpiredUrls = async () => {
     );
 
     if (result.modifiedCount > 0) {
-      console.log(`🧹 Deactivated ${result.modifiedCount} expired URLs`);
+      console.log(`Deactivated ${result.modifiedCount} expired URLs`);
     }
   } catch (error) {
-    console.error("❌ Error cleaning up expired URLs:", error.message);
+    console.error("Error cleaning up expired URLs:", error.message);
   }
 };
 

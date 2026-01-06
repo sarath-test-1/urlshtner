@@ -7,6 +7,7 @@ const {
   errorResponse,
   validationErrorResponse,
   notFoundResponse,
+  unauthorizedResponse,
 } = require("../utils/apiResponse");
 
 class UserController {
@@ -68,7 +69,7 @@ class UserController {
       }
 
       const { name } = req.body || {};
-      const userId = req.userId;
+      const { id } = req.params;
 
       // Build update object
       const updateData = {};
@@ -79,7 +80,7 @@ class UserController {
       }
 
       // Update user
-      const user = await User.findByIdAndUpdate(userId, updateData, {
+      const user = await User.findByIdAndUpdate(id, updateData, {
         new: true,
         runValidators: true,
       });

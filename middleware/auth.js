@@ -8,7 +8,7 @@ const { errorResponse, unauthorizedResponse } = require("../utils/apiResponse");
 const authenticateToken = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
-    const token = authHeader && authHeader.split(" ")[1]; // Bearer TOKEN
+    const token = authHeader && authHeader.split(" ")[1]; // Bearer token
 
     if (!token) {
       return unauthorizedResponse(res, "Access token is required");
@@ -89,7 +89,7 @@ const verifyRefreshToken = async (req, res, next) => {
 const optionalAuth = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
-    const token = authHeader && authHeader.split(" ")[1]; // Bearer TOKEN
+    const token = authHeader && authHeader.split(" ")[1]; // Bearer token
 
     if (token) {
       const decoded = jwt.verify(token, process.env.JWT_SECRET);

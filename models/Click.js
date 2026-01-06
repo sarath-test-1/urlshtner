@@ -12,7 +12,6 @@ const clickSchema = new mongoose.Schema(
     userId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
-      required: [false, "User ID is required"], // REMOVE THE MESSAGE?
       default: null,
     },
     shortCode: {
@@ -65,8 +64,6 @@ const clickSchema = new mongoose.Schema(
       enum: ["desktop", "mobile", "tablet", "unknown"],
       default: "unknown",
     },
-
-    // LEARN
     timestamp: {
       type: Date,
       default: Date.now,

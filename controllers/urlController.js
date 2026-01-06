@@ -9,12 +9,13 @@ const {
   errorResponse,
   validationErrorResponse,
   notFoundResponse,
+  unauthorizedResponse,
 } = require("../utils/apiResponse");
 
 // Helper function to extract client info from request
 const extractClientInfo = (req) => {
   // Get client IP (IPv4 or IPv6-safe)
-  const ip = requestIp.getClientIp(req); // e.g. "127.0.0.1", "::1", "::ffff:127.0.0.1"
+  const ip = requestIp.getClientIp(req);
 
   // Normalize IPv6 localhost & IPv4-mapped IPv6
   const normalizedIp =
@@ -55,6 +56,9 @@ class UrlController {
       const { long_url, title, description, expires_at } = req.body;
 
       const userId = req.userId;
+      if (!userId) {
+        return unauthorizedResponse(res, "Authentication required");
+      }
 
       // Create short URL
       const url = await UrlService.createShortUrl(
@@ -166,6 +170,9 @@ class UrlController {
       }
 
       const userId = req.userId;
+      if (!userId) {
+        return unauthorizedResponse(res, "Authentication required");
+      }
       const options = {
         page: parseInt(req.query.page) || 1,
         limit: parseInt(req.query.limit) || 10,
@@ -208,6 +215,9 @@ class UrlController {
     try {
       const { id } = req.params;
       const userId = req.userId;
+      if (!userId) {
+        return unauthorizedResponse(res, "Authentication required");
+      }
 
       if (!id) {
         return errorResponse(res, "URL ID is required", 400);
@@ -292,6 +302,9 @@ class UrlController {
     try {
       const { id } = req.params;
       const userId = req.userId;
+      if (!userId) {
+        return unauthorizedResponse(res, "Authentication required");
+      }
 
       if (!id) {
         return errorResponse(res, "URL ID is required", 400);
@@ -299,7 +312,7 @@ class UrlController {
 
       const result = await UrlService.deleteUrl(id, userId);
 
-      return successResponse(res, null, result.message, 204);
+      return res.status(204).send();
     } catch (error) {
       console.error("Delete URL error:", error);
 
@@ -318,6 +331,9 @@ class UrlController {
     try {
       const { url_ids } = req.body;
       const userId = req.userId;
+      if (!userId) {
+        return unauthorizedResponse(res, "Authentication required");
+      }
 
       if (!url_ids || !Array.isArray(url_ids) || url_ids.length === 0) {
         return errorResponse(res, "URL IDs array is required", 400);
@@ -351,6 +367,9 @@ class UrlController {
     try {
       const { id } = req.params;
       const userId = req.userId;
+      if (!userId) {
+        return unauthorizedResponse(res, "Authentication required");
+      }
 
       if (!id) {
         return errorResponse(res, "URL ID is required", 400);

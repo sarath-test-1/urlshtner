@@ -54,8 +54,8 @@ const userSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
-    toJSON: { virtuals: true }, // LEARN
-    toObject: { virtuals: true }, // LEARN
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true },
   }
 );
 
@@ -94,7 +94,6 @@ userSchema.methods.updateLastLogin = async function () {
   return await this.save({ validateBeforeSave: false });
 };
 
-// LEARN
 // Virtual for user's URLs
 userSchema.virtual("urls", {
   ref: "Url",

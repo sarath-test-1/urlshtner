@@ -1,4 +1,5 @@
 const { body, param, query } = require("express-validator");
+const mongoose = require("mongoose");
 
 /**
  * User registration validation
@@ -12,17 +13,19 @@ const validateUserRegistration = [
     .isLength({ min: 2, max: 50 })
     .withMessage("Name must be between 2 and 50 characters")
     .bail()
-    .matches(/^[a-zA-Z\s.'-]+$/)
+    .matches(/^[\p{L}\s.'-]+$/u)
     // Why this regex?
     //     Allows:
     //         John Doe
     //         Mary-Jane
     //         O'Connor
     //         Dr. Smith
+    //         José García
+    //         Müller
+    //         李明
     //     Blocks:
     //         numbers
-    //         emojis
-    //         scripts
+    //         emojis (most)
     .withMessage("Name can only contain letters and spaces"),
 
   body("email")
@@ -191,31 +194,6 @@ const validateShortCode = [
 ];
 
 /**
- * Pagination validation
- */
-const validatePagination = [
-  query("page")
-    .optional()
-    .isInt({ min: 1 })
-    .withMessage("Page must be a positive integer"),
-
-  query("limit")
-    .optional()
-    .isInt({ min: 1, max: 100 })
-    .withMessage("Limit must be between 1 and 100"),
-
-  query("sortBy")
-    .optional()
-    .isIn(["createdAt", "clickCount", "longUrl"])
-    .withMessage("Sort by must be one of: createdAt, clickCount, longUrl"),
-
-  query("sortOrder")
-    .optional()
-    .isIn(["asc", "desc"])
-    .withMessage("Sort order must be either asc or desc"),
-];
-
-/**
  * Analytics time range validation
  */
 const validateAnalyticsTimeRange = [
@@ -257,7 +235,6 @@ module.exports = {
   validateUserLogin,
   validateUrlCreation,
   validateShortCode,
-  validatePagination,
   validateAnalyticsTimeRange,
   validateProfileUpdate,
   validateChangePassword,

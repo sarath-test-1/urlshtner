@@ -26,8 +26,10 @@ const router = express.Router();
 router.get(
   "/",
   authenticateToken,
+  requireAdmin,
   generalLimiter,
   validatePagination,
+  handleValidationErrors,
   UserController.getUsers
 );
 
@@ -39,6 +41,7 @@ router.get(
 router.get(
   "/:id",
   authenticateToken,
+  requireAdmin,
   generalLimiter,
   UserController.getUserDetails
 );
@@ -51,7 +54,10 @@ router.get(
 router.patch(
   "/:id",
   authenticateToken,
+  requireAdmin,
+  generalLimiter,
   validateUserUpdate,
+  handleValidationErrors,
   UserController.updateUser
 );
 
@@ -63,6 +69,7 @@ router.patch(
 router.delete(
   "/:id",
   authenticateToken,
+  requireAdmin,
   generalLimiter,
   UserController.deleteUser
 );

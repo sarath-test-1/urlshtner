@@ -36,7 +36,13 @@ router.post(
  * @desc Login user
  * @access Public
  */
-router.post("/login", authLimiter, validateUserLogin, AuthController.login);
+router.post(
+  "/login",
+  authLimiter,
+  validateUserLogin,
+  handleValidationErrors,
+  AuthController.login
+);
 
 /**
  * @route POST /api/v1/auth/logout
@@ -53,7 +59,7 @@ router.post("/logout", authenticateToken, AuthController.logout);
 router.post("/refresh", verifyRefreshToken, AuthController.refreshToken);
 
 /**
- * @route POST /api/v1/auth/user
+ * @route GET /api/v1/auth/user
  * @desc Get user details
  * @access Private
  */
@@ -76,6 +82,7 @@ router.put(
   "/profile",
   authenticateToken,
   validateProfileUpdate,
+  handleValidationErrors,
   AuthController.updateProfile
 );
 
@@ -89,6 +96,7 @@ router.patch(
   authenticateToken,
   passwordResetLimiter,
   validateChangePassword,
+  handleValidationErrors,
   AuthController.changePassword
 );
 
@@ -101,6 +109,7 @@ router.patch(
   "/deactivate",
   authenticateToken,
   validateAccountDeactivation,
+  handleValidationErrors,
   AuthController.deactivateAccount
 );
 

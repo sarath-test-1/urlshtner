@@ -3,6 +3,7 @@ const User = require("../models/User");
 const Click = require("../models/Click");
 const { generateBase62 } = require("../utils/base62");
 const { getRedisClient } = require("../config/redis");
+const { scanAndDelete } = require("../utils/redisScanDelete");
 
 class UrlService {
   /**
@@ -77,10 +78,7 @@ class UrlService {
       }
 
       if (redisClient) {
-        const keys = await redisClient.keys("analytics:admin:*");
-        if (keys.length) {
-          await redisClient.del(keys);
-        }
+        await scanAndDelete(redisClient, "analytics:admin:*");
       }
 
       return url;
@@ -123,15 +121,10 @@ class UrlService {
       }
 
       // Fallback to database
-      const url = await Url.findOne({ shortCode, isActive: true });
+      //   const url = await Url.findOne({ shortCode, isActive: true });
+      const url = await Url.findActive().findOne({ shortCode });
 
       if (!url) {
-        return null;
-      }
-
-      // Check if URL is expired
-      if (url.isExpired()) {
-        await url.updateOne({ isActive: false });
         return null;
       }
 
@@ -230,22 +223,14 @@ class UrlService {
         }
 
         try {
-          const pattern = `analytics:user:${url.userId}:*`;
-          const keys = await redisClient.keys(pattern);
-
-          if (keys.length > 0) {
-            await redisClient.del(keys);
-          }
+          await scanAndDelete(redisClient, `analytics:user:${url.userId}:*`);
         } catch (err) {
           console.error("Analytics cache clear error:", err);
         }
       }
 
       if (redisClient) {
-        const keys = await redisClient.keys("analytics:admin:*");
-        if (keys.length) {
-          await redisClient.del(keys);
-        }
+        await scanAndDelete(redisClient, "analytics:admin:*");
       }
 
       return click;
@@ -283,14 +268,29 @@ class UrlService {
       }
 
       // Get URLs with pagination
-      const urls = await Url.find(filter)
+
+      //   old
+      //   const urls = await Url.find(filter)
+      //     .sort(sortOptions)
+      //     .skip(skip)
+      //     .limit(parseInt(limit))
+      //     .lean();
+
+      //   // Get total count for pagination
+      //   const total = await Url.countDocuments(filter);
+      // old end
+
+      const query = Url.findActive().where(filter);
+
+      const urls = await query
         .sort(sortOptions)
         .skip(skip)
         .limit(parseInt(limit))
         .lean();
 
-      // Get total count for pagination
-      const total = await Url.countDocuments(filter);
+      // Prevents expired URLs from showing in dashboard
+      // Prevents pagination mismatch
+      const total = await Url.findActive().where(filter).countDocuments();
 
       return {
         urls,
@@ -334,7 +334,7 @@ class UrlService {
         throw new Error("No valid updates provided");
       }
 
-      await url.save(); // ✅ single DB write, validators run
+      await url.save(); // single DB write, validators run
 
       // Invalidate cache
       const redisClient = getRedisClient();
@@ -386,10 +386,7 @@ class UrlService {
       }
 
       if (redisClient) {
-        const keys = await redisClient.keys("analytics:admin:*");
-        if (keys.length) {
-          await redisClient.del(keys);
-        }
+        await scanAndDelete(redisClient, "analytics:admin:*");
       }
 
       return { message: "URL deleted successfully" };
@@ -452,7 +449,11 @@ class UrlService {
    */
   static async getUrlDetails(urlId, userId) {
     try {
-      const url = await Url.findOne({ _id: urlId, userId });
+      //   const url = await Url.findOne({ _id: urlId, userId });
+
+      // Prevents viewing expired URLs via direct ID access
+      // Consistent behavior with list view
+      const url = await Url.findActive().findOne({ _id: urlId, userId });
 
       if (!url) {
         throw new Error("URL not found");

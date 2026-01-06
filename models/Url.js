@@ -1,4 +1,11 @@
 const mongoose = require("mongoose");
+const validator = require("validator");
+
+if (!process.env.BASE_URL) {
+  console.warn(
+    "WARNING: BASE_URL environment variable is not set. shortUrl virtual will return null."
+  );
+}
 
 const urlSchema = new mongoose.Schema(
   {
@@ -26,7 +33,12 @@ const urlSchema = new mongoose.Schema(
       maxlength: [2048, "URL cannot exceed 2048 characters"],
       validate: {
         validator: function (v) {
-          return /^https?:\/\/.+/.test(v);
+          return validator.isURL(v, {
+            require_protocol: true,
+            protocols: ["http", "https"],
+            require_tld: true,
+            allow_underscores: false,
+          });
         },
         message: "Please provide a valid URL with http or https protocol",
       },
@@ -76,27 +88,22 @@ const urlSchema = new mongoose.Schema(
   }
 );
 
-// LEARN
 // Create indexes for performance
 urlSchema.index({ userId: 1 });
 urlSchema.index({ userId: 1, createdAt: -1 });
 urlSchema.index({ isActive: 1 });
 urlSchema.index({ expiresAt: 1 });
 urlSchema.index({ clickCount: -1 });
-urlSchema.index({ longUrl: "text", title: "text" }); // Text search index
+
+urlSchema.index(
+  { longUrl: "text", title: "text" },
+  { weights: { title: 10, longUrl: 5 } }
+); // Text search index with title prioritized
 
 // Check if URL is expired
 urlSchema.methods.isExpired = function () {
   return this.expiresAt && new Date() > this.expiresAt;
 };
-
-// Increment click count // REMOVE LATER OLD
-// The incrementClick method modifies clickCount in memory and calls save(). Under concurrent requests, this creates a race condition where increments can be lost (two reads of count=5, both save count=6).
-// urlSchema.methods.incrementClick = async function () {
-//   this.clickCount += 1;
-//   this.lastAccessedAt = new Date();
-//   return await this.save({ validateBeforeSave: false });
-// };
 
 urlSchema.methods.incrementClick = async function () {
   const updated = await this.constructor.findByIdAndUpdate(
@@ -107,6 +114,9 @@ urlSchema.methods.incrementClick = async function () {
     },
     { new: true }
   );
+  if (!updated) {
+    throw new Error("URL document not found during click increment");
+  }
   this.clickCount = updated.clickCount;
   this.lastAccessedAt = updated.lastAccessedAt;
   return this;

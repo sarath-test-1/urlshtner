@@ -8,7 +8,7 @@ const getSeederData = () => {
       {
         name: "admin",
         email: "admin@yourcompany.com",
-        password: process.env.ADMIN_PASSWORD || "changeme123!",
+        password: process.env.ADMIN_PASSWORD,
         role: "admin",
         isActive: true,
       },
@@ -56,6 +56,13 @@ const seedByEnvironment = async () => {
   try {
     const userData = getSeederData();
     const env = process.env.NODE_ENV || "development";
+
+    // Ensure admin password is set in production
+    if (env === "production" && !process.env.ADMIN_PASSWORD) {
+      throw new Error(
+        "ADMIN_PASSWORD environment variable must be set in production"
+      );
+    }
 
     console.log(`Seeding for ${env} environment...`);
 

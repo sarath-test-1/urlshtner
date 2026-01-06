@@ -4,7 +4,7 @@ const {
   successResponse,
   errorResponse,
   validationErrorResponse,
-  notFoundResponse,
+  unauthorizedResponse,
 } = require("../utils/apiResponse");
 
 class AnalyticsController {
@@ -20,6 +20,9 @@ class AnalyticsController {
       }
 
       const userId = req.userId;
+      if (!userId) {
+        return unauthorizedResponse(res, "Authentication required");
+      }
       const timeRange = {};
 
       if (req.query.start_date && req.query.end_date) {

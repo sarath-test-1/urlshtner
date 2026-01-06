@@ -77,7 +77,7 @@ const authLimiter = createRateLimiter({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 5, // 5 attempts per 15 minutes
   message: "Too many authentication attempts, please try again later",
-  skipSuccessfulRequests: true, // Don't count successful requests // LEARN
+  skipSuccessfulRequests: true, // Don't count successful requests
   keyGenerator: (req, res) => ipKeyGenerator(req.ip), // Safe IP handling
 });
 
