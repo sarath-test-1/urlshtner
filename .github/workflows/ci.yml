@@ -78,7 +78,12 @@ jobs:
         run: npm ci
 
       - name: Run security audit
-        run: npm audit --audit-level=high
+        # --omit=dev: most of this app's vulnerabilities came from
+        # devDependencies (redoc-cli's Swagger toolchain, jest, webpack)
+        # that never ship in the Docker image or to Render. Scoping to
+        # production deps keeps this gate meaningful instead of blocking
+        # on tooling that isn't actually deployed.
+        run: npm audit --omit=dev --audit-level=high
 
   # ════════════════════════════════════════════════════════════════════════════
   # JOB 2: Test Matrix
