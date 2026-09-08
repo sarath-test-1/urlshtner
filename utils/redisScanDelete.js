@@ -1,18 +1,21 @@
 const scanAndDelete = async (redisClient, pattern, batchSize = 100) => {
-  let cursor = 0;
+  let cursor = "0";
 
-  do {
-    const result = await redisClient.scan(cursor, {
-      MATCH: pattern,
-      COUNT: batchSize,
+  while (true) {
+    const { cursor: nextCursor, keys } = await redisClient.scan(cursor, {
+      match: pattern,
+      count: batchSize,
     });
 
-    cursor = Number(result.cursor);
-
-    if (result.keys.length > 0) {
-      await redisClient.del(result.keys);
+    if (keys?.length) {
+      await redisClient.del(keys);
     }
-  } while (cursor !== 0);
+
+    // Upstash returns null when done
+    if (!nextCursor || nextCursor === "0") break;
+
+    cursor = nextCursor;
+  }
 };
 
 module.exports = { scanAndDelete };

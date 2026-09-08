@@ -25,7 +25,10 @@ module.exports = {
 
   // Clear mocks between tests
   clearMocks: true,
+  //   resetMocks: true,
+  //   restoreMocks: true,
 
   // Verbose output
   verbose: true,
+  //   forceExit: true,
 };

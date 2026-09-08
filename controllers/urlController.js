@@ -1,11 +1,12 @@
-const { validationResult } = require("express-validator");
 const UAParser = require("ua-parser-js");
 const requestIp = require("request-ip");
 const geoip = require("geoip-lite");
+const { recordClickQueue } = require("../queues/recordClick.queue");
 
 const UrlService = require("../services/urlService");
 const {
   successResponse,
+  listingSuccessResponse,
   errorResponse,
   validationErrorResponse,
   notFoundResponse,
@@ -22,8 +23,8 @@ const extractClientInfo = (req) => {
     ip === "::1"
       ? "127.0.0.1"
       : ip?.startsWith("::ffff:")
-      ? ip.replace("::ffff:", "")
-      : ip;
+        ? ip.replace("::ffff:", "")
+        : ip;
 
   // Parse user-agent
   const parser = new UAParser(req.headers["user-agent"]);
@@ -47,29 +48,21 @@ const extractClientInfo = (req) => {
 class UrlController {
   static async createShortUrl(req, res) {
     try {
-      // Check for validation errors
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        return validationErrorResponse(res, errors.array());
-      }
-
-      const { long_url, title, description, expires_at } = req.body;
+      const { long_url, title, description, expires_at } = req.body || {};
 
       const userId = req.userId;
-      if (!userId) {
-        return unauthorizedResponse(res, "Authentication required");
-      }
 
       // Create short URL
       const url = await UrlService.createShortUrl(
         userId,
         long_url,
         { title, description },
-        expires_at
+        expires_at,
       );
 
       const response = {
         id: url._id,
+        user_id: url.userId,
         short_code: url.shortCode,
         short_url: `${process.env.BASE_URL}/${url.shortCode}`,
         long_url: url.longUrl,
@@ -85,7 +78,7 @@ class UrlController {
         res,
         response,
         "Short URL created successfully",
-        201
+        201,
       );
     } catch (error) {
       console.error("Create short URL error:", error);
@@ -106,7 +99,7 @@ class UrlController {
 
       // Get long URL
       const urlData = await UrlService.getLongUrl(shortCode);
-
+      
       if (!urlData) {
         return res.status(404).send(`
           <!DOCTYPE html>
@@ -133,8 +126,10 @@ class UrlController {
       console.log(clientInfo);
 
       // Record click analytics (non-blocking)
-      UrlService.recordClick(shortCode, urlData, clientInfo).catch((error) => {
-        console.error("Analytics recording error:", error);
+      recordClickQueue.add("record", {
+        shortCode,
+        urlData,
+        clientInfo,
       });
 
       // Perform 302 redirect for analytics tracking
@@ -163,22 +158,23 @@ class UrlController {
 
   static async getUserUrls(req, res) {
     try {
-      // Check for validation errors
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        return validationErrorResponse(res, errors.array());
-      }
-
       const userId = req.userId;
       if (!userId) {
         return unauthorizedResponse(res, "Authentication required");
       }
+
+      const SORT_FIELD_MAP = {
+        click_count: "clickCount",
+        expires_at: "expiresAt",
+        created_at: "createdAt",
+      };
+
       const options = {
         page: parseInt(req.query.page) || 1,
         limit: parseInt(req.query.limit) || 10,
         search: req.query.search || "",
-        sortBy: req.query.sortBy || "createdAt",
-        sortOrder: req.query.sortOrder || "desc",
+        sortBy: SORT_FIELD_MAP[req.query.sort_by] || "createdAt",
+        sortOrder: req.query.sort_order || "desc",
       };
 
       const result = await UrlService.getUserUrls(userId, options);
@@ -199,12 +195,12 @@ class UrlController {
         updatedAt: url.updatedAt,
       }));
 
-      const response = {
-        urls: formattedUrls,
-        pagination: result.pagination,
-      };
-
-      return successResponse(res, response, "URLs retrieved successfully");
+      return listingSuccessResponse(
+        res,
+        formattedUrls,
+        result.meta,
+        "URLs retrieved successfully",
+      );
     } catch (error) {
       console.error("Get user URLs error:", error);
       return errorResponse(res, error.message || "Failed to get URLs");
@@ -213,17 +209,13 @@ class UrlController {
 
   static async getUrlDetails(req, res) {
     try {
-      const { id } = req.params;
       const userId = req.userId;
       if (!userId) {
         return unauthorizedResponse(res, "Authentication required");
       }
 
-      if (!id) {
-        return errorResponse(res, "URL ID is required", 400);
-      }
-
-      const url = await UrlService.getUrlDetails(id, userId);
+      // URL is already fetched and attached by requireOwnership middleware
+      const url = req.resource;
 
       const response = {
         id: url._id,
@@ -243,14 +235,10 @@ class UrlController {
       return successResponse(
         res,
         response,
-        "URL details retrieved successfully"
+        "URL details retrieved successfully",
       );
     } catch (error) {
       console.error("Get URL details error:", error);
-
-      if (error.message === "URL not found") {
-        return notFoundResponse(res, "URL not found");
-      }
 
       return errorResponse(res, error.message || "Failed to get URL details");
     }
@@ -261,12 +249,6 @@ class UrlController {
    */
   static async updateUrl(req, res) {
     try {
-      // Check for validation errors
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        return validationErrorResponse(res, errors.array());
-      }
-
       const updateData = req.body;
 
       const url = await UrlService.updateUrl(req.resource, updateData);
@@ -289,37 +271,28 @@ class UrlController {
       return successResponse(res, response, "URL updated successfully");
     } catch (error) {
       console.error("Update URL error:", error);
-
-      if (error.message === "URL not found") {
-        return notFoundResponse(res, "URL not found");
-      }
-
       return errorResponse(res, error.message || "Failed to update URL");
     }
   }
 
+  /**
+   * Delete URL
+   */
   static async deleteUrl(req, res) {
     try {
-      const { id } = req.params;
       const userId = req.userId;
       if (!userId) {
         return unauthorizedResponse(res, "Authentication required");
       }
 
-      if (!id) {
-        return errorResponse(res, "URL ID is required", 400);
-      }
+      // URL is already fetched and attached by requireOwnership middleware
+      const url = req.resource;
 
-      const result = await UrlService.deleteUrl(id, userId);
+      await UrlService.deleteUrl(url, req.user);
 
       return res.status(204).send();
     } catch (error) {
       console.error("Delete URL error:", error);
-
-      if (error.message === "URL not found") {
-        return notFoundResponse(res, "URL not found");
-      }
-
       return errorResponse(res, error.message || "Failed to delete URL");
     }
   }
@@ -329,30 +302,19 @@ class UrlController {
    */
   static async bulkDeleteUrls(req, res) {
     try {
-      const { url_ids } = req.body;
       const userId = req.userId;
       if (!userId) {
         return unauthorizedResponse(res, "Authentication required");
       }
 
-      if (!url_ids || !Array.isArray(url_ids) || url_ids.length === 0) {
-        return errorResponse(res, "URL IDs array is required", 400);
-      }
+      const urls = req.resources;
 
-      if (url_ids.length > 50) {
-        return errorResponse(
-          res,
-          "Cannot delete more than 50 URLs at once",
-          400
-        );
-      }
-
-      const result = await UrlService.bulkDeleteUrls(url_ids, userId);
+      const result = await UrlService.bulkDeleteUrls(urls, userId);
 
       return successResponse(
         res,
         { deletedCount: result.deletedCount },
-        result.message
+        result.message,
       );
     } catch (error) {
       console.error("Bulk delete URLs error:", error);
@@ -365,17 +327,14 @@ class UrlController {
    */
   static async toggleUrlStatus(req, res) {
     try {
-      const { id } = req.params;
       const userId = req.userId;
       if (!userId) {
         return unauthorizedResponse(res, "Authentication required");
       }
 
-      if (!id) {
-        return errorResponse(res, "URL ID is required", 400);
-      }
+      // URL is already fetched and attached by requireOwnership middleware
+      const url = req.resource;
 
-      const url = await UrlService.getUrlDetails(id, userId);
       const updatedUrl = await UrlService.updateUrl(url, {
         is_active: !url.isActive,
       });
@@ -390,11 +349,6 @@ class UrlController {
       return successResponse(res, response, "URL status updated successfully");
     } catch (error) {
       console.error("Toggle URL status error:", error);
-
-      if (error.message === "URL not found") {
-        return notFoundResponse(res, "URL not found");
-      }
-
       return errorResponse(res, error.message || "Failed to update URL status");
     }
   }

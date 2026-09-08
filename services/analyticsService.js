@@ -3,6 +3,7 @@ const User = require("../models/User");
 const Url = require("../models/Url");
 const Click = require("../models/Click");
 const { getRedisClient } = require("../config/redis");
+const logger = require("../utils/logger");
 
 class AnalyticsService {
   /**
@@ -26,7 +27,10 @@ class AnalyticsService {
             return JSON.parse(cached);
           }
         } catch (err) {
-          console.error("Analytics cache read error:", err);
+          logger.warn({
+            message: "Analytics cache read error:",
+            error: err.message,
+          });
         }
       }
 
@@ -56,9 +60,8 @@ class AnalyticsService {
       }
 
       // Get basic stats
-      const [user, totalUrls, totalClicks, recentUrls, popularUrls] =
+      const [totalUrls, totalClicks, recentUrls, popularUrls] =
         await Promise.all([
-          User.findById(userId).select("totalUrls totalClicks createdAt"),
           Url.countDocuments({ userId, ...urlDateFilter }),
           Click.countDocuments({ userId, ...clickDateFilter }),
           Url.find({ userId, ...urlDateFilter })
@@ -199,7 +202,10 @@ class AnalyticsService {
           // 5 minutes is perfect for analytics
           await redisClient.setEx(cacheKey, 180, JSON.stringify(analyticsData));
         } catch (err) {
-          console.error("Analytics cache write error:", err);
+          logger.warn({
+            message: "Analytics cache write error:",
+            error: err.message,
+          });
         }
       }
 
@@ -230,7 +236,10 @@ class AnalyticsService {
             return JSON.parse(cached);
           }
         } catch (err) {
-          console.error("Admin analytics cache read error:", err);
+          logger.warn({
+            message: "Admin analytics cache read error:",
+            error: err.message,
+          });
         }
       }
 
@@ -406,7 +415,7 @@ class AnalyticsService {
           user_growth: userGrowth.map((growth) => ({
             date: `${growth._id.year}-${String(growth._id.month).padStart(
               2,
-              "0"
+              "0",
             )}-${String(growth._id.day).padStart(2, "0")}`,
             users: growth.count,
           })),
@@ -471,11 +480,19 @@ class AnalyticsService {
 
       // Store in cache
       if (redisClient) {
-        await redisClient.setEx(
-          cacheKey,
-          300, // 5 minutes
-          JSON.stringify(analytics)
-        );
+        try {
+          // 5 minutes is perfect for analytics
+          await redisClient.setEx(
+            cacheKey,
+            300, // 5 minutes
+            JSON.stringify(analytics),
+          );
+        } catch (err) {
+          logger.warn({
+            message: "Analytics cache write error:",
+            error: err.message,
+          });
+        }
       }
 
       return analytics;

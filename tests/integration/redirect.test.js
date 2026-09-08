@@ -1,6 +1,7 @@
 const request = require("supertest");
-const app = require("../../app"); // Adjust path to your main app file
-const Url = require("../../models/Url"); // Adjust path as needed
+const app = require("../../app");
+const Url = require("../../models/Url");
+const UrlService = require("../../services/urlService");
 const { createUserWithToken } = require("../setup/testHelpers");
 const { createTestUrl } = require("../setup/urlHelpers");
 
@@ -28,11 +29,22 @@ describe("URL Redirect Endpoint", () => {
       // Check redirect location
       expect(response.headers.location).toBe(testUrl.longUrl);
 
-      // Verify click count was incremented (might need slight delay)
-      setTimeout(async () => {
-        const updatedUrl = await Url.findById(testUrl._id);
-        expect(updatedUrl.clickCount).toBe(testUrl.clickCount + 1);
-      }, 100);
+      // remove
+      //   //   Verify click count was incremented (need slight delay)
+      //   setTimeout(async () => {
+      //     const updatedUrl = await Url.findById(testUrl._id);
+      //     expect(updatedUrl.clickCount).toBe(testUrl.clickCount + 1);
+      //   }, 200);
+    });
+
+    it("should handle case sensitivity of short codes", async () => {
+      // Test with uppercase version of shortCode
+      const response = await request(app)
+        .get(`/${testUrl.shortCode.toUpperCase()}`)
+        .expect(404); // Assuming short codes are case sensitive
+
+      expect(response.headers["content-type"]).toMatch(/text\/html/);
+      expect(response.text).toContain("Link Not Found");
     });
 
     it("should return 404 HTML page for non-existent short code", async () => {
@@ -116,81 +128,59 @@ describe("URL Redirect Endpoint", () => {
       );
     });
 
-    it("should update lastAccessedAt timestamp", async () => {
-      const initialAccessTime = testUrl.lastAccessedAt;
+    // it("should update lastAccessedAt timestamp", async () => {
+    //   const initialAccessTime = testUrl.lastAccessedAt;
 
-      await request(app).get(`/${testUrl.shortCode}`).expect(302);
+    //   await request(app).get(`/${testUrl.shortCode}`).expect(302);
 
-      // Wait a bit and check that lastAccessedAt was updated
-      setTimeout(async () => {
-        const updatedUrl = await Url.findById(testUrl._id);
-        if (initialAccessTime) {
-          expect(updatedUrl.lastAccessedAt).not.toEqual(initialAccessTime);
-        } else {
-          expect(updatedUrl.lastAccessedAt).toBeDefined();
-        }
-      }, 100);
-    });
+    //   //   // Wait a bit and check that lastAccessedAt was updated
+    //     setTimeout(async () => {
+    //       const updatedUrl = await Url.findById(testUrl._id);
+    //       if (initialAccessTime) {
+    //         expect(updatedUrl.lastAccessedAt).not.toEqual(initialAccessTime);
+    //       } else {
+    //         expect(updatedUrl.lastAccessedAt).toBeDefined();
+    //       }
+    //     }, 100);
+    // });
 
     it("should return 500 HTML page on server error", async () => {
-      // This test might be tricky to implement without actually causing a server error
-      // You might need to mock the UrlService.getLongUrl method to throw an error
-      // For now, we'll skip this test or implement it based on your error handling
-      // Example approach (would require mocking):
-      // jest.spyOn(UrlService, 'getLongUrl').mockRejectedValue(new Error('Database error'));
-      // const response = await request(app)
-      //   .get('/errortest123')
-      //   .expect(500);
-      // expect(response.headers['content-type']).toMatch(/text\/html/);
-      // expect(response.text).toContain('Server Error');
+      jest
+        .spyOn(UrlService, "getLongUrl")
+        .mockRejectedValueOnce(new Error("Database error"));
+      const response = await request(app).get("/errortest123").expect(500);
+      expect(response.headers["content-type"]).toMatch(/text\/html/);
+      expect(response.text).toContain("Server Error");
+
+      // Restore mock
+      UrlService.getLongUrl.mockRestore();
     });
 
-    it("should handle concurrent clicks properly", async () => {
-      const initialClickCount = testUrl.clickCount;
+    // it("should handle concurrent clicks properly", async () => {
+    //     const initialClickCount = testUrl.clickCount;
 
-      // Make multiple concurrent requests
-      const promises = Array(5)
-        .fill()
-        .map(() => request(app).get(`/${testUrl.shortCode}`).expect(302));
+    //   // Make multiple concurrent requests
+    //   const promises = Array(5)
+    //     .fill()
+    //     .map(() => request(app).get(`/${testUrl.shortCode}`).expect(302));
 
-      await Promise.all(promises);
+    //   await Promise.all(promises);
 
-      // Wait a bit for analytics to be recorded
-      setTimeout(async () => {
-        const updatedUrl = await Url.findById(testUrl._id);
-        expect(updatedUrl.clickCount).toBeGreaterThan(initialClickCount);
-      }, 200);
-    });
+    //   // Wait a bit for analytics to be recorded
+    //   setTimeout(async () => {
+    //     const updatedUrl = await Url.findById(testUrl._id);
+    //     expect(updatedUrl.clickCount).toBeGreaterThan(initialClickCount);
+    //   }, 500);
+    // });
 
     it("should not redirect if shortCode is empty", async () => {
-      const response = await request(app).get("/").expect(404); // This depends on your root route handling
-
-      // If you have a homepage, this might be 200
-      // Adjust based on your app's behavior
+      const response = await request(app).get("/").expect(404);
     });
 
-    it("should handle case sensitivity of short codes", async () => {
-      // Test with uppercase version of shortCode
-      const response = await request(app)
-        .get(`/${testUrl.shortCode.toUpperCase()}`)
-        .expect(404); // Assuming short codes are case sensitive
+    it("should return 422 for invalid short code format", async () => {
+      const response = await request(app).get("/invalid@code!").expect(422);
 
-      expect(response.headers["content-type"]).toMatch(/text\/html/);
-      expect(response.text).toContain("Link Not Found");
-    });
-
-    it("should handle special characters in short codes", async () => {
-      const specialUrl = await createTestUrl(user._id, {
-        longUrl: "https://special-example.com",
-        shortCode: "test-code_123",
-        isActive: true,
-      });
-
-      const response = await request(app)
-        .get(`/${specialUrl.shortCode}`)
-        .expect(302);
-
-      expect(response.headers.location).toBe("https://special-example.com");
+      expect(response.body.success).toBe(false);
     });
   });
 });

@@ -64,7 +64,7 @@ const errorResponse = (
  * Validation error response helper
  */
 const validationErrorResponse = (res, errors) => {
-  return errorResponse(res, "Validation failed", 400, errors);
+  return errorResponse(res, "The given data was invalid.", 422, errors);
 };
 
 /**

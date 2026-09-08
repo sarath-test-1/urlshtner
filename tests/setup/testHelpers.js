@@ -1,11 +1,16 @@
 const jwt = require("jsonwebtoken");
-const User = require("../../models/User"); // Adjust path as needed
+const User = require("../../models/User");
+const { randomUUID, randomBytes } = require("crypto");
+
+const generateUniqueShortCode = () => {
+  return randomBytes(6).toString("hex").substring(0, 10); // 10 alphanumeric chars
+};
 
 /**
  * Generate unique username/email to avoid conflicts
  */
 const generateUniqueId = () => {
-  return Date.now().toString() + Math.random().toString(36).substr(2, 9);
+  return randomUUID();
 };
 
 /**
@@ -14,9 +19,9 @@ const generateUniqueId = () => {
 const createTestUser = async (userData = {}) => {
   const uniqueId = generateUniqueId();
   const defaultUserData = {
-    username: `testuser${uniqueId}`,
+    name: `test user`,
     email: `test${uniqueId}@example.com`,
-    password: "TestPass123",
+    password: "TestPass&123",
     role: "user",
   };
 
@@ -28,16 +33,18 @@ const createTestUser = async (userData = {}) => {
 /**
  * Create an admin test user
  */
-const createTestAdmin = async (userData = {}) => {
+const createTestAdmin = async (adminData = {}) => {
   const uniqueId = generateUniqueId();
   const defaultAdminData = {
-    username: `testadmin${uniqueId}`,
+    name: `test admin`,
     email: `admin${uniqueId}@example.com`,
-    password: "AdminPass123",
+    password: "AdminPass&123",
     role: "admin",
   };
 
-  return createTestUser({ ...defaultAdminData, ...userData });
+  const user = new User({ ...defaultAdminData, ...adminData });
+  await user.save();
+  return user;
 };
 
 /**
@@ -72,33 +79,33 @@ const createAdminWithToken = async (userData = {}) => {
  */
 const testUserData = {
   valid: {
-    username: `validuser${Date.now()}`,
+    name: `test user`,
     email: `valid${Date.now()}@example.com`,
-    password: "ValidPass123",
+    password: "ValidPass&123",
   },
 
   invalidEmail: {
-    username: `testuser${Date.now()}`,
+    name: `test user`,
     email: "invalid-email",
-    password: "TestPass123",
+    password: "TestPass&123",
   },
 
   weakPassword: {
-    username: `testuser${Date.now()}`,
+    name: `test user`,
     email: `test${Date.now()}@example.com`,
-    password: "123", // Too short, no uppercase, no special chars
+    password: "123", // Too short, no uppercase, no lowercase, no special chars
   },
 
   invalidUsername: {
     username: "ab", // Too short
     email: `test${Date.now()}@example.com`,
-    password: "TestPass123",
+    password: "TestPass&123",
   },
 
   specialCharsUsername: {
-    username: "test@user!", // Invalid characters
+    name: "test@user!", // Invalid characters
     email: `test${Date.now()}@example.com`,
-    password: "TestPass123",
+    password: "TestPass&123",
   },
 };
 
@@ -117,6 +124,7 @@ const authHeader = (token) => {
 };
 
 module.exports = {
+  generateUniqueShortCode,
   generateUniqueId,
   createTestUser,
   createTestAdmin,

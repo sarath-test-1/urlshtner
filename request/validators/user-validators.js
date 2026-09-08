@@ -1,9 +1,26 @@
 const { body, param, query } = require("express-validator");
 
 /**
+ * Validate user ID parameter
+ */
+const validateUserId = [
+  param("id")
+    .notEmpty()
+    .withMessage("User ID is required")
+    .isMongoId()
+    .withMessage("Invalid user ID format"),
+];
+
+/**
  * User update validation
  */
 const validateUserUpdate = [
+  param("id")
+    .notEmpty()
+    .withMessage("User ID is required")
+    .isMongoId()
+    .withMessage("Invalid user ID format"),
+
   body("name")
     .trim()
     .notEmpty()
@@ -19,5 +36,6 @@ const validateUserUpdate = [
 ];
 
 module.exports = {
+  validateUserId,
   validateUserUpdate,
 };

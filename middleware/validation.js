@@ -14,6 +14,7 @@ const handleValidationErrors = (req, res, next) => {
     });
 
     return res.status(422).json({
+      success: false,
       message: "The given data was invalid.",
       errors: formattedErrors,
     });

@@ -74,7 +74,7 @@ const clickSchema = new mongoose.Schema(
     timestamps: false, // We're using custom timestamp field
     toJSON: { virtuals: true },
     toObject: { virtuals: true },
-  }
+  },
 );
 
 // Create indexes for analytics queries
@@ -82,10 +82,6 @@ clickSchema.index({ urlId: 1, timestamp: -1 });
 clickSchema.index({ userId: 1, timestamp: -1 });
 clickSchema.index({ shortCode: 1, timestamp: -1 });
 clickSchema.index({ timestamp: -1 });
-clickSchema.index({ country: 1 });
-clickSchema.index({ browser: 1 });
-clickSchema.index({ os: 1 });
-clickSchema.index({ device: 1 });
 
 // Virtual for formatted timestamp
 clickSchema.virtual("formattedTimestamp").get(function () {

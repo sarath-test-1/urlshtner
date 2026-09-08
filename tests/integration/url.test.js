@@ -1,6 +1,6 @@
 const request = require("supertest");
-const app = require("../../app"); // Adjust path to your main app file
-const Url = require("../../models/Url"); // Adjust path as needed
+const app = require("../../app");
+const Url = require("../../models/Url");
 
 const {
   createUserWithToken,

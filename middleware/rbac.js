@@ -1,6 +1,7 @@
 const {
   forbiddenResponse,
   unauthorizedResponse,
+  validationErrorResponse,
   notFoundResponse,
   errorResponse,
 } = require("../utils/apiResponse");
@@ -82,6 +83,92 @@ const requireOwnershipOrAdmin = (resourceUserIdField = "userId") => {
 };
 
 /**
+ * Check if user owns the resource
+ */
+const requireOwnership = (model, resourceIdParam = "id") => {
+  return async (req, res, next) => {
+    try {
+      // Check if user is authenticated
+      if (!req.user) {
+        return unauthorizedResponse(res, "Authentication required");
+      }
+
+      const resourceId = req.params[resourceIdParam];
+      if (!resourceId) {
+        return errorResponse(res, "Resource ID is required", 400);
+      }
+
+      // Find the resource
+      const resource = await model.findById(resourceId);
+      if (!resource) {
+        return notFoundResponse(res, "Resource not found");
+      }
+
+      // Check if user owns the resource
+      if (resource.userId && resource.userId.toString() !== req.userId) {
+        return forbiddenResponse(
+          res,
+          "Access denied. You can only access or modify your own resources"
+        );
+      }
+      // Attach resource to request for use in controller
+      req.resource = resource;
+      next();
+    } catch (error) {
+      console.error("Ownership check error:", error);
+      return forbiddenResponse(res, "Access validation failed");
+    }
+  };
+};
+
+/**
+ * Check ownership of all resources in req.body.url_ids
+ */
+const requireAllOwnership = (model, bodyKey = "url_ids") => {
+  return async (req, res, next) => {
+    try {
+      if (!req.user) {
+        return unauthorizedResponse(res, "Authentication required");
+      }
+
+      const ids = req.body[bodyKey];
+
+      if (!Array.isArray(ids) || ids.length === 0) {
+        return errorResponse(res, "Resource IDs are required", 422);
+      }
+
+      // Fetch all resources
+      const resources = await model.find({ _id: { $in: ids } });
+
+      // Ensure all IDs exist
+      if (resources.length !== ids.length) {
+        return notFoundResponse(res, "One or more resources were not found");
+      }
+
+      // Ensure ownership
+      const unauthorized = resources.find(
+        (r) => r.userId?.toString() !== req.userId
+      );
+
+      if (unauthorized) {
+        return forbiddenResponse(
+          res,
+          "Access denied. You can only access or modify your own resources"
+        );
+      }
+
+      // Attach for controller
+      req.resources = resources;
+
+      next();
+    } catch (error) {
+      console.error("Bulk ownership check error:", error);
+      return forbiddenResponse(res, "Access validation failed");
+    }
+  };
+};
+
+/**
  * Check if user can modify resource (owner or admin)
  */
 const canModifyResource = (model, resourceIdParam = "id") => {
@@ -157,6 +244,8 @@ module.exports = {
   requireRole,
   requireAdmin,
   requireOwnershipOrAdmin,
+  requireOwnership,
+  requireAllOwnership,
   canModifyResource,
   getRateLimit,
 };

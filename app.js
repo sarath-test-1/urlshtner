@@ -2,11 +2,14 @@ const express = require("express");
 const cookieParser = require("cookie-parser");
 const cors = require("cors");
 const helmet = require("helmet");
-const morgan = require("morgan");
 const path = require("path");
 const compression = require("compression");
 const logger = require("./utils/logger");
 const requestId = require("./middleware/requestId");
+const httpLogger = require("./middleware/httpLogger");
+const handleValidationErrors = require("./middleware/validation");
+const swaggerUi = require("swagger-ui-express");
+const swaggerSpec = require("./docs/swagger");
 
 // Import routes
 const authRoutes = require("./routes/auth");
@@ -23,8 +26,25 @@ const {
   generalLimiter,
 } = require("./middleware/rateLimiter");
 
-const { validateShortCode } = require("./request/validators/auth-validators");
+const { validateShortCode } = require("./request/validators/url-validators");
 const { errorResponse } = require("./utils/apiResponse");
+
+const { createBullBoard } = require("@bull-board/api");
+const { BullMQAdapter } = require("@bull-board/api/bullMQAdapter");
+const { ExpressAdapter } = require("@bull-board/express");
+const { welcomeEmailQueue } = require("./queues/welcomeEmail.queue");
+const { requireAdmin } = require("./middleware/auth");
+
+const serverAdapter = new ExpressAdapter();
+serverAdapter.setBasePath("/admin/queues");
+
+createBullBoard({
+  queues: [
+    new BullMQAdapter(welcomeEmailQueue),
+    // add more queues here
+  ],
+  serverAdapter,
+});
 
 // Create Express app
 const app = express();
@@ -33,6 +53,9 @@ const app = express();
 app.set("trust proxy", 1);
 
 app.use(requestId);
+app.use(httpLogger);
+
+app.use("/admin/queues", requireAdmin, serverAdapter.getRouter());
 
 // Security middleware
 app.use(
@@ -47,7 +70,7 @@ app.use(
         connectSrc: ["'self'", process.env.BASE_URL],
       },
     },
-  })
+  }),
 );
 
 app.use(
@@ -60,7 +83,7 @@ app.use(
       }
       return compression.filter(req, res);
     },
-  })
+  }),
 );
 
 // CORS configuration
@@ -78,7 +101,8 @@ const corsOptions = {
     if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
-      callback(new Error("Not allowed by CORS"));
+      const AppError = require("./utils/AppError");
+      callback(new AppError("Not allowed by CORS", 403, "CORS_ERROR"));
     }
   },
   credentials: true,
@@ -92,22 +116,6 @@ app.use(express.json({ limit: "10mb" }));
 app.use(cookieParser());
 
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
-
-morgan.token("id", (req) => req.requestId);
-morgan.token("user", (req) => req.user?.id || "guest");
-
-// logging middleware
-const morganFormat = ":id :method :url :status :response-time ms user=:user";
-
-app.use(
-  morgan(morganFormat, {
-    stream: {
-      write: (message) => logger.http(message.trim()),
-    },
-    skip: (req, res) =>
-      process.env.NODE_ENV === "production" && res.statusCode < 400,
-  })
-);
 
 // Health check endpoint
 app.get("/health", (req, res) => {
@@ -128,6 +136,8 @@ app.use("/api/v1/analytics", analyticsRoutes);
 // Serve static files from React build
 app.use(express.static(path.join(__dirname, "dist")));
 
+app.use("/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+
 // Short URL redirect route (must be after API routes)
 /**
  * @route GET /:shortCode
@@ -138,7 +148,8 @@ app.get(
   "/:shortCode",
   urlAccessLimiter,
   validateShortCode,
-  UrlController.redirectToLongUrl
+  handleValidationErrors,
+  UrlController.redirectToLongUrl,
 );
 
 // 404 handler for API routes
@@ -148,49 +159,10 @@ app.use("/api", (req, res) => {
   return errorResponse(
     res,
     `API endpoint not found: ${req.method} ${req.originalUrl}`,
-    404
+    404,
   );
 });
 
 app.use(require("./middleware/errorHandler"));
-// Global error handler
-// app.use((error, req, res, next) => {
-//   console.error("Global error handler:", error);
-
-//   // Handle different types of errors
-//   if (error.name === "ValidationError") {
-//     const errors = Object.values(error.errors).map((err) => ({
-//       field: err.path,
-//       message: err.message,
-//     }));
-//     return errorResponse(res, "Validation failed", 400, errors);
-//   }
-
-//   if (error.name === "CastError") {
-//     return errorResponse(res, "Invalid ID format", 400);
-//   }
-
-//   if (error.code === 11000) {
-//     const field = Object.keys(error.keyValue)[0];
-//     return errorResponse(res, `${field} already exists`, 400);
-//   }
-
-//   if (error.name === "JsonWebTokenError") {
-//     return errorResponse(res, "Invalid token", 401);
-//   }
-
-//   if (error.name === "TokenExpiredError") {
-//     return errorResponse(res, "Token expired", 401);
-//   }
-
-//   // Default error response
-//   const statusCode = error.statusCode || 500;
-//   const message =
-//     process.env.NODE_ENV === "production"
-//       ? "Something went wrong"
-//       : error.message;
-
-//   return errorResponse(res, message, statusCode);
-// });
 
 module.exports = app;

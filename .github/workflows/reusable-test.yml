@@ -1,0 +1,165 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# reusable-test.yml — Reusable Workflow: Run Tests (url-shortener)
+# ══════════════════════════════════════════════════════════════════════════════
+#
+# Adapted from the reference CI project. Key differences for this app:
+#   - MongoDB: this app uses transactions, which require a replica set —
+#     even a single-node one. GitHub Actions' `services:` block can't run
+#     a post-start command (no way to `rs.initiate()` after the container
+#     comes up), so Mongo is started manually as a step instead: `docker run`
+#     with `--replSet rs0`, then a follow-up step calls `rs.initiate()` and
+#     polls until it's PRIMARY. No auth (matches your local test setup).
+#   - Redis: this app DOES need a real Redis instance for integration tests,
+#     AND it requires auth (REDIS_PASSWORD/REDIS_USERNAME in your .env).
+#     The official redis:7-alpine image has no clean way to set a password
+#     via the `services:` block (no `command:` override support in Actions),
+#     so we use bitnami/redis, which reads REDIS_PASSWORD as an env var.
+#   - The Redis password below is a throwaway value that only exists inside
+#     this ephemeral CI container — not a real secret — so it's inlined
+#     rather than stored as a GitHub secret. Happy to switch it to a repo
+#     secret if you'd rather.
+#   - No lint step yet — ESLint isn't set up in this project. Slot a
+#     "Run ESLint" step in before unit tests once you add one.
+#
+# HOW TO CALL THIS:
+#   jobs:
+#     run-tests:
+#       uses: ./.github/workflows/reusable-test.yml
+#       with:
+#         node-version: "20"
+
+name: Reusable - Run Tests
+
+on:
+  workflow_call:
+    inputs:
+      node-version:
+        description: "Node.js version to test against"
+        required: true
+        type: string
+    outputs:
+      coverage-pct:
+        description: "Line coverage percentage"
+        value: ${{ jobs.test.outputs.coverage-pct }}
+
+jobs:
+  test:
+    name: Test (Node ${{ inputs.node-version }})
+    runs-on: ubuntu-latest
+
+    outputs:
+      coverage-pct: ${{ steps.coverage.outputs.pct }}
+
+    # ── Service Containers ────────────────────────────────────────────────────
+    # Only Redis runs here — Mongo needs a post-start init command
+    # (rs.initiate()), which `services:` can't do, so it's started as a
+    # regular step below instead.
+    services:
+      redis:
+        image: bitnami/redis:7.2
+        env:
+          REDIS_PASSWORD: ci_test_redis_password
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli -a ci_test_redis_password ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ inputs.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: "npm"
+
+      - name: Cache node_modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node-${{ inputs.node-version }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-${{ inputs.node-version }}-
+            ${{ runner.os }}-node-
+
+      - name: Install dependencies
+        run: npm ci
+
+      # ── Start MongoDB as a single-node replica set ────────────────────────
+      # Transactions require a replica set even with one node. `docker run`
+      # (not `services:`) so we can exec into it afterward to initiate.
+      - name: Start MongoDB (replica set)
+        run: |
+          docker run -d \
+            --name mongo-test \
+            -p 27017:27017 \
+            mongo:7 --replSet rs0 --bind_ip_all
+
+          echo "Waiting for MongoDB to accept connections..."
+          for i in $(seq 1 15); do
+            if docker exec mongo-test mongosh --quiet --eval "db.runCommand({ ping: 1 })" > /dev/null 2>&1; then
+              echo "MongoDB is up."
+              break
+            fi
+            sleep 2
+          done
+
+      - name: Initiate replica set
+        run: |
+          docker exec mongo-test mongosh --quiet --eval "rs.initiate()"
+
+          echo "Waiting for replica set to elect a PRIMARY..."
+          for i in $(seq 1 15); do
+            STATE=$(docker exec mongo-test mongosh --quiet --eval "rs.status().myState" 2>/dev/null || echo "0")
+            if [ "$STATE" = "1" ]; then
+              echo "Replica set is PRIMARY."
+              break
+            fi
+            sleep 2
+          done
+
+      # NOTE: no lint step yet — see header comment.
+
+      # ── Unit tests ─────────────────────────────────────────────────────────
+      # Fully mocked (DB + Redis) — no service dependency.
+      - name: Run unit tests
+        run: npm run test:unit
+
+      # ── Integration tests ─────────────────────────────────────────────────
+      # Mongo: real single-node replica set started above, no auth.
+      # Redis: hits the real service container, using the same env var
+      # names as your .env (REDIS_HOST/REDIS_PORT/REDIS_USERNAME/REDIS_PASSWORD).
+      - name: Run integration tests
+        run: npm run test:integration
+        env:
+          NODE_ENV: test
+          MONGODB_URI: "mongodb://127.0.0.1:27017/url_shortener_test?replicaSet=rs0"
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
+          REDIS_USERNAME: default
+          REDIS_PASSWORD: ci_test_redis_password
+          REDIS_PROVIDER: local
+
+      # ── Extract coverage percentage ───────────────────────────────────────
+      - name: Extract coverage percentage
+        id: coverage
+        run: |
+          PCT=$(npm run test:coverage -- --coverageReporters=text 2>/dev/null | grep "Lines" | awk '{print $3}' | tr -d '%' || echo "0")
+          echo "pct=${PCT}" >> $GITHUB_OUTPUT
+          echo "Coverage: ${PCT}%"
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report-node-${{ inputs.node-version }}
+          path: coverage/
+          retention-days: 7
+
+      - name: Stop MongoDB
+        if: always()
+        run: docker rm -f mongo-test || true

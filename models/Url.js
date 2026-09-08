@@ -3,7 +3,7 @@ const validator = require("validator");
 
 if (!process.env.BASE_URL) {
   console.warn(
-    "WARNING: BASE_URL environment variable is not set. shortUrl virtual will return null."
+    "WARNING: BASE_URL environment variable is not set. shortUrl virtual will return null.",
   );
 }
 
@@ -12,7 +12,7 @@ const urlSchema = new mongoose.Schema(
     userId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
-      required: [true, "User ID is required"],
+      default: null,
     },
     shortCode: {
       type: String,
@@ -85,19 +85,20 @@ const urlSchema = new mongoose.Schema(
     timestamps: true,
     toJSON: { virtuals: true },
     toObject: { virtuals: true },
-  }
+  },
 );
 
 // Create indexes for performance
-urlSchema.index({ userId: 1 });
 urlSchema.index({ userId: 1, createdAt: -1 });
-urlSchema.index({ isActive: 1 });
-urlSchema.index({ expiresAt: 1 });
+// Most URLs probably have expiresAt: null. Indexing null values wastes space.
+// Use a sparse index so only documents with an actual expiry are indexed:
+urlSchema.index({ expiresAt: 1 }, { sparse: true });
 urlSchema.index({ clickCount: -1 });
+urlSchema.index({ isActive: 1 });
 
 urlSchema.index(
   { longUrl: "text", title: "text" },
-  { weights: { title: 10, longUrl: 5 } }
+  { weights: { title: 10, longUrl: 5 } },
 ); // Text search index with title prioritized
 
 // Check if URL is expired
@@ -112,7 +113,7 @@ urlSchema.methods.incrementClick = async function () {
       $inc: { clickCount: 1 },
       $set: { lastAccessedAt: new Date() },
     },
-    { new: true }
+    { new: true },
   );
   if (!updated) {
     throw new Error("URL document not found during click increment");

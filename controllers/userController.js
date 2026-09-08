@@ -1,4 +1,3 @@
-const { validationResult } = require("express-validator");
 const User = require("../models/User");
 const UserService = require("../services/userService");
 const {
@@ -13,12 +12,6 @@ const {
 class UserController {
   static async getUsers(req, res) {
     try {
-      // Check for validation errors
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        return validationErrorResponse(res, errors.array());
-      }
-
       const SORT_FIELD_MAP = {
         name: "name",
         created_at: "createdAt",
@@ -62,12 +55,6 @@ class UserController {
    */
   static async updateUser(req, res) {
     try {
-      // Check for validation errors
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        return validationErrorResponse(res, errors.array());
-      }
-
       const { name } = req.body || {};
       const { id } = req.params;
 
@@ -75,29 +62,17 @@ class UserController {
       const updateData = {};
       if (name) updateData.name = name;
 
-      if (Object.keys(updateData).length === 0) {
-        return errorResponse(res, "No valid updates provided", 400);
-      }
-
-      // Update user
-      const user = await User.findByIdAndUpdate(id, updateData, {
-        new: true,
-        runValidators: true,
-      });
-
-      if (!user) {
-        return errorResponse(res, "User not found", 404);
-      }
+      const user = await UserService.updateUser(id, updateData);
 
       const userResponse = {
         id: user._id,
         name: user.name,
         email: user.email,
         role: user.role,
-        createdAt: user.createdAt,
-        lastLogin: user.lastLogin,
-        totalUrls: user.totalUrls,
-        totalClicks: user.totalClicks,
+        created_at: user.createdAt,
+        last_login: user.lastLogin,
+        total_urls: user.totalUrls,
+        total_clicks: user.totalClicks,
       };
 
       return successResponse(
@@ -108,17 +83,26 @@ class UserController {
     } catch (error) {
       console.error("Update user error:", error);
 
+      if (error.message === "User not found") {
+        return notFoundResponse(res, "User not found");
+      }
+
+      if (error.message === "No valid updates provided") {
+        return errorResponse(res, "No valid updates provided", 400);
+      }
+
       return errorResponse(res, "Failed to update user");
     }
   }
 
   static async getUserDetails(req, res) {
     try {
-      const { id } = req.params;
-
-      if (!id) {
-        return errorResponse(res, "User ID is required", 400);
+      const userId = req.userId;
+      if (!userId) {
+        return unauthorizedResponse(res, "Authentication required");
       }
+
+      const { id } = req.params;
 
       const user = await UserService.getUserDetails(id);
 
@@ -127,10 +111,10 @@ class UserController {
         name: user.name,
         email: user.email,
         role: user.role,
-        createdAt: user.createdAt,
-        lastLogin: user.lastLogin,
-        totalUrls: user.totalUrls,
-        totalClicks: user.totalClicks,
+        created_at: user.createdAt,
+        last_login: user.lastLogin,
+        total_urls: user.totalUrls,
+        total_clicks: user.totalClicks,
       };
 
       return successResponse(
@@ -152,9 +136,11 @@ class UserController {
   static async deleteUser(req, res) {
     try {
       const { id } = req.params;
+      const currentUserId = req.userId;
 
-      if (!id) {
-        return errorResponse(res, "User ID is required", 400);
+      // Prevent self-deletion
+      if (id === currentUserId) {
+        return errorResponse(res, "Cannot delete your own account", 400);
       }
 
       const result = await UserService.deleteUser(id);

@@ -1,0 +1,214 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# ci.yml — Main CI Pipeline (url-shortener)
+# ══════════════════════════════════════════════════════════════════════════════
+#
+# PHASE 1 (this version): audit + test matrix.
+# Coming in later phases: docker-build job, coverage-gate job.
+# deploy.yml is untouched — this workflow is CI-only, kept as a portfolio
+# reference alongside the simple Render deploy pipeline.
+#
+# PIPELINE OVERVIEW (Phase 1):
+#
+#   [push / PR to main]
+#       │
+#       ├──────────────┐
+#       ▼              ▼
+#   ┌─────────┐   ┌───────────────────────────────────┐
+#   │  audit  │   │      test (matrix: Node 18/20/22)  │
+#   └─────────┘   │  install → unit → integration      │  ← calls reusable-test.yml
+#                 └─────────────────────────────────────┘
+
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - ".gitignore"
+
+  pull_request:
+    branches:
+      - main
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - ".gitignore"
+
+  workflow_dispatch:
+    inputs:
+      skip-docker:
+        description: "Skip Docker build?"
+        required: false
+        default: "false"
+        type: boolean
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  NODE_ENV: test
+
+jobs:
+  # ════════════════════════════════════════════════════════════════════════════
+  # JOB 1: Security Audit
+  # ════════════════════════════════════════════════════════════════════════════
+  audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run security audit
+        run: npm audit --audit-level=high
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # JOB 2: Test Matrix
+  # ════════════════════════════════════════════════════════════════════════════
+  test:
+    name: Test
+    needs: []             # Runs in parallel with audit
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: ["18", "20", "22"]
+
+    uses: ./.github/workflows/reusable-test.yml
+    with:
+      node-version: ${{ matrix.node-version }}
+    # No `secrets:` block — this app's Redis service container needs no
+    # password, and Mongo is handled in-process via mongodb-memory-server.
+    # (Reference project passed db-password here for its real Postgres.)
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # JOB 3: Docker Build
+  # ════════════════════════════════════════════════════════════════════════════
+  # Build the image and smoke-test it against /health.
+  #
+  # ⚠️ IMPORTANT DEVIATION FROM THE REFERENCE WORKFLOW:
+  # server.js `await`s a successful MongoDB connection before calling
+  # app.listen() — if Mongo isn't reachable the process exits. The reference
+  # workflow's smoke test pointed at DB_HOST=localhost with no real service
+  # container behind it, which only worked because that app's health check
+  # didn't depend on the DB. That trick would NOT work here — the container
+  # would exit before /health ever responds.
+  #
+  # Fix: real Mongo + Redis service containers below, and the smoke-tested
+  # container is run with `--network host` so "localhost" inside it actually
+  # resolves to the runner (and therefore to these services). `-p` port
+  # mapping is dropped since host networking exposes the port directly.
+  docker-build:
+    name: Docker Build
+    runs-on: ubuntu-latest
+    needs: [audit, test]
+
+    if: |
+      github.event.pull_request.draft == false &&
+      github.event.inputs.skip-docker != 'true'
+
+    services:
+      mongo:
+        image: mongo:7
+        env:
+          MONGO_INITDB_ROOT_USERNAME: admin
+          MONGO_INITDB_ROOT_PASSWORD: ci_test_mongo_password
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --eval 'db.adminCommand(\"ping\")' -u admin -p ci_test_mongo_password --authenticationDatabase admin"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: bitnami/redis:7.2
+        env:
+          REDIS_PASSWORD: ci_test_redis_password
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli -a ci_test_redis_password ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Extract app version
+        id: version
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "app-version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "App version: ${VERSION}"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: false          # CI only — deploy.yml/Render handles actual deployment
+          load: true
+          tags: |
+            url-shortener:${{ steps.version.outputs.app-version }}
+            url-shortener:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # ── Smoke test the Docker image ───────────────────────────────────────
+      # --network host: lets the container reach the Mongo/Redis service
+      # containers via localhost (see the deviation note above).
+      - name: Smoke test Docker image
+        run: |
+          docker run -d \
+            --name ci-test \
+            --network host \
+            -e NODE_ENV=test \
+            -e PORT=5000 \
+            -e BASE_URL=http://localhost:5000 \
+            -e MONGODB_URI="mongodb://admin:ci_test_mongo_password@localhost:27017/urlshortener?authSource=admin" \
+            -e REDIS_HOST=localhost \
+            -e REDIS_PORT=6379 \
+            -e REDIS_USERNAME=default \
+            -e REDIS_PASSWORD=ci_test_redis_password \
+            -e REDIS_PROVIDER=local \
+            url-shortener:${{ github.sha }}
+
+          # Wait for the container to start (Mongo connect + listen)
+          sleep 5
+
+          curl --fail --retry 5 --retry-delay 2 http://localhost:5000/health || \
+            (docker logs ci-test && exit 1)
+
+          echo "✅ Docker smoke test passed"
+
+      - name: Write job summary
+        run: |
+          echo "## 🐳 Docker Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "| --- | --- |" >> $GITHUB_STEP_SUMMARY
+          echo "| App Version | ${{ steps.version.outputs.app-version }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Git SHA | \`${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Branch | ${{ github.ref_name }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Status | ✅ Build succeeded |" >> $GITHUB_STEP_SUMMARY

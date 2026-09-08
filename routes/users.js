@@ -4,7 +4,10 @@ const { authenticateToken } = require("../middleware/auth");
 const handleValidationErrors = require("../middleware/validation");
 const { requireAdmin } = require("../middleware/rbac");
 const { authLimiter } = require("../middleware/rateLimiter");
-const { validateUserUpdate } = require("../request/validators/user-validators");
+const {
+  validateUserId,
+  validateUserUpdate,
+} = require("../request/validators/user-validators");
 const {
   validatePagination,
 } = require("../request/validators/pagination-validators");
@@ -19,31 +22,33 @@ const {
 const router = express.Router();
 
 /**
- * @route GET /api/v1/users
- * @desc Get users with pagination and search
+ * @route get /api/v1/users
+ * @desc Get list of paginated users
  * @access Private
  */
 router.get(
   "/",
-  authenticateToken,
-  requireAdmin,
   generalLimiter,
+  authenticateToken,
   validatePagination,
   handleValidationErrors,
-  UserController.getUsers
+  requireAdmin,
+  UserController.getUsers,
 );
 
 /**
- * @route GET /api/v1/users/:id
- * @desc Get user details
+ * @route get /api/v1/users/:id
+ * @desc Get user
  * @access Private
  */
 router.get(
   "/:id",
-  authenticateToken,
-  requireAdmin,
   generalLimiter,
-  UserController.getUserDetails
+  authenticateToken,
+  validateUserId,
+  handleValidationErrors,
+  requireAdmin,
+  UserController.getUserDetails,
 );
 
 /**
@@ -53,12 +58,12 @@ router.get(
  */
 router.patch(
   "/:id",
-  authenticateToken,
-  requireAdmin,
   generalLimiter,
+  authenticateToken,
   validateUserUpdate,
   handleValidationErrors,
-  UserController.updateUser
+  requireAdmin,
+  UserController.updateUser,
 );
 
 /**
@@ -68,10 +73,12 @@ router.patch(
  */
 router.delete(
   "/:id",
-  authenticateToken,
-  requireAdmin,
   generalLimiter,
-  UserController.deleteUser
+  authenticateToken,
+  validateUserId,
+  handleValidationErrors,
+  requireAdmin,
+  UserController.deleteUser,
 );
 
 module.exports = router;

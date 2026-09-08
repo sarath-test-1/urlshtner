@@ -2,6 +2,7 @@ const express = require("express");
 const AnalyticsController = require("../controllers/analyticsController");
 const { authenticateToken } = require("../middleware/auth");
 const { requireAdmin } = require("../middleware/rbac");
+const handleValidationErrors = require("../middleware/validation");
 const {
   analyticsLimiter,
   generalLimiter,
@@ -19,10 +20,11 @@ const router = express.Router();
  */
 router.get(
   "/user",
-  authenticateToken,
   analyticsLimiter,
+  authenticateToken,
   validateAnalyticsTimeRange,
-  AnalyticsController.getUserAnalytics
+  handleValidationErrors,
+  AnalyticsController.getUserAnalytics,
 );
 
 /**
@@ -32,11 +34,12 @@ router.get(
  */
 router.get(
   "/admin",
-  authenticateToken,
-  requireAdmin,
   analyticsLimiter,
+  authenticateToken,
   validateAnalyticsTimeRange,
-  AnalyticsController.getAdminAnalytics
+  handleValidationErrors,
+  requireAdmin,
+  AnalyticsController.getAdminAnalytics,
 );
 
 module.exports = router;

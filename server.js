@@ -3,21 +3,47 @@ const path = require("path");
 
 dotenv.config({ path: path.join(__dirname, "./.env") });
 
+const { startCleanupJob } = require("./services/expiredUrlCleanup");
+const mongoose = require("mongoose");
+const { getRedisClient, connectRedis } = require("./config/redis");
+const logger = require("./utils/logger");
+
 const app = require("./app");
 const connectDB = require("./config/database");
-const { connectRedis } = require("./config/redis");
 
 // Validate required environment variables
 const requiredEnvVars = [
   "NODE_ENV",
   "PORT",
-  "MONGODB_URI",
-  "JWT_SECRET",
   "BASE_URL",
+
+  "ADMIN_NAME",
+  "ADMIN_EMAIL",
+  "ADMIN_PASSWORD",
+
+  "MONGODB_URI",
+
+  "REDIS_USERNAME",
+  "REDIS_PASSWORD",
+  "REDIS_HOST",
+  "REDIS_PORT",
+
+  "JWT_SECRET",
+  "JWT_REFRESH_SECRET",
+  "JWT_EXPIRE",
+
+  "RATE_LIMIT_WINDOW_MS",
+  "RATE_LIMIT_MAX_REQUESTS",
+  
+  "SHORT_URL_LENGTH",
+  "SERVER_NAME",
+
+
+
 ];
 
 const missingEnvVars = requiredEnvVars.filter(
-  (varName) => !process.env[varName]
+  (varName) => !process.env[varName],
 );
 
 console.log(missingEnvVars);
@@ -46,39 +72,74 @@ process.on("unhandledRejection", (err, promise) => {
 
 // Graceful shutdown handler
 const gracefulShutdown = async (signal) => {
-  console.log(`\nReceived ${signal}. Starting graceful shutdown...`);
+  console.log("gracefulShutdown called");
+  logger.info(`Received ${signal}. Starting graceful shutdown...`);
 
   if (!server) {
-    console.log("Server not yet started, exiting immediately");
+    logger.info("Server not yet started, exiting immediately");
     process.exit(0);
   }
 
+  // Force exit after 10 seconds if graceful shutdown hangs
+  const forceExitTimer = setTimeout(() => {
+    logger.error("Graceful shutdown timed out, forcing exit");
+    process.exit(1);
+  }, 10000);
+
+  // Prevent timer from keeping process alive
+  forceExitTimer.unref();
+
   server.close(async () => {
-    console.log("HTTP server closed");
+    logger.info("HTTP server closed");
+    console.log("HTTP server closed")
 
-    // Close database connections
     try {
-      const mongoose = require("mongoose");
       await mongoose.connection.close();
-      console.log("MongoDB connection closed");
+      logger.info("MongoDB connection closed");
+       console.log("MongoDB connection closed")
 
-      const { getRedisClient } = require("./config/redis");
       const redisClient = getRedisClient();
       if (redisClient) {
         await redisClient.quit();
-        console.log("Redis connection closed");
+        logger.info("Redis connection closed");
+         console.log("Redis connection closed")
       }
+
+      // Flush Logtail logs before exit so nothing is lost
+      if (process.env.LOGTAIL_TOKEN) {
+        const { logtail } = require("./utils/logger");
+        await logtail?.flush();
+      }
+
+      clearTimeout(forceExitTimer);
     } catch (err) {
-      console.error("Error during shutdown:", err);
+      logger.error({ message: "Error during shutdown", error: err.message });
+       console.log("Error during shutdown")
     } finally {
       process.exit(0);
     }
   });
 };
 
-// Listen for shutdown signals
 process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
 process.on("SIGINT", () => gracefulShutdown("SIGINT"));
+
+// Catch unhandled rejections and exceptions — last safety net
+process.on("unhandledRejection", (reason) => {
+  logger.error({
+    message: "Unhandled promise rejection",
+    error: reason?.message || reason,
+  });
+});
+
+process.on("uncaughtException", (err) => {
+  logger.error({
+    message: "Uncaught exception",
+    error: err.message,
+    stack: err.stack,
+  });
+  gracefulShutdown("uncaughtException");
+});
 
 // Start server function
 const startServer = async () => {
@@ -98,7 +159,7 @@ const startServer = async () => {
     } catch (error) {
       console.warn(
         "  Redis connection failed - continuing without cache:",
-        error.message
+        error.message,
       );
     }
 
@@ -131,6 +192,13 @@ const startServer = async () => {
       global.server = server;
     });
 
+    server.requestTimeout = 30000;    // max time to receive a full request (30s — 5min default is too generous for a URL shortener)
+    // Node's 5-minute default is unnecessarily generous for your use case (URL creation/redirect/analytics endpoints)
+    // 30s is more realistic and protects you from slow-client attacks tying up connections.
+    
+    server.headersTimeout = 35000;    // must be > requestTimeout; guards the slowloris attack vector
+    server.keepAliveTimeout = 5000;   // how long to hold idle keep-alive sockets open
+
     return server;
   } catch (error) {
     console.error(" Failed to start server:", error.message);
@@ -139,28 +207,8 @@ const startServer = async () => {
   }
 };
 
-// Cleanup function for expired URLs (runs every hour)
-const cleanupExpiredUrls = async () => {
-  try {
-    const Url = require("./models/Url");
-    const result = await Url.updateMany(
-      {
-        expiresAt: { $lte: new Date() },
-        isActive: true,
-      },
-      { isActive: false }
-    );
-
-    if (result.modifiedCount > 0) {
-      console.log(`Deactivated ${result.modifiedCount} expired URLs`);
-    }
-  } catch (error) {
-    console.error("Error cleaning up expired URLs:", error.message);
-  }
-};
-
-// Schedule cleanup task
-setInterval(cleanupExpiredUrls, 60 * 60 * 1000); // Run every hour
+// Cleanup function for expired URLs
+startCleanupJob();
 
 // Start the server
 let server;

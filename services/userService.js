@@ -1,5 +1,9 @@
+const mongoose = require("mongoose");
 const User = require("../models/User");
+const Click = require("../models/Click");
+const Url = require("../models/Url");
 const { getRedisClient } = require("../config/redis");
+const logger = require("../utils/logger");
 
 class UserService {
   /**
@@ -60,7 +64,7 @@ class UserService {
    */
   static async getUserDetails(userId) {
     try {
-      const user = await User.findOne({ _id: userId });
+      const user = await User.findById(userId);
 
       if (!user) {
         throw new Error("User not found");
@@ -68,46 +72,86 @@ class UserService {
 
       return user;
     } catch (error) {
+      if (error.message === "User not found") {
+        throw error;
+      }
+
       throw new Error(`Failed to get user details: ${error.message}`);
     }
+  }
+
+  /**
+   * Update user
+   */
+  static async updateUser(userId, updateData) {
+    if (Object.keys(updateData).length === 0) {
+      throw new Error("No valid updates provided");
+    }
+
+    const user = await User.findByIdAndUpdate(userId, updateData, {
+      new: true,
+      runValidators: true,
+    });
+
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    return user;
   }
 
   /**
    * Delete user
    */
   static async deleteUser(userId) {
+
+    const session = await mongoose.startSession();
+
     try {
-      const user = await User.findOne({ _id: userId });
+      let result;
 
-      if (!user) {
-        throw new Error("User not found");
-      }
+      await session.withTransaction(async () => {
+        const user = await User.findById(userId).session(session);
 
-      // Delete URL and related clicks
-      await User.findByIdAndDelete(userId);
+        if (!user) {
+          throw new Error("User not found");
+        }
 
-      // Remove from cache
+        // Delete all URLs created by this user
+        await Url.deleteMany({ userId }).session(session);
+
+        // Delete all clicks associated with user's URLs
+        await Click.deleteMany({ userId }).session(session);
+
+        // Delete user
+        await User.findByIdAndDelete(userId).session(session);
+
+        result = { message: "User deleted successfully" };
+      });
+
+      // Cache invalidation AFTER transaction commits
+      // (no point invalidating if transaction rolls back)
       const redisClient = getRedisClient();
       if (redisClient) {
         let cursor = 0;
-
         do {
-          const result = await redisClient.scan(cursor, {
+          const scanResult = await redisClient.scan(cursor, {
             MATCH: "analytics:admin:*",
             COUNT: 100,
           });
-
-          cursor = result.cursor;
-
-          if (result.keys.length > 0) {
-            await redisClient.del(result.keys);
+          cursor = scanResult.cursor;
+          if (scanResult.keys.length > 0) {
+            await redisClient.del(scanResult.keys);
           }
         } while (cursor !== 0);
       }
 
-      return { message: "User deleted successfully" };
+      return result;
     } catch (error) {
+      if (error.message === "User not found") throw error;
       throw new Error(`Failed to delete user: ${error.message}`);
+    } finally {
+      await session.endSession();
     }
   }
 }

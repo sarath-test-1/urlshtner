@@ -1,4 +1,3 @@
-const { validationResult } = require("express-validator");
 const AnalyticsService = require("../services/analyticsService");
 const {
   successResponse,
@@ -13,12 +12,6 @@ class AnalyticsController {
    */
   static async getUserAnalytics(req, res) {
     try {
-      // Check for validation errors
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        return validationErrorResponse(res, errors.array());
-      }
-
       const userId = req.userId;
       if (!userId) {
         return unauthorizedResponse(res, "Authentication required");
@@ -54,12 +47,6 @@ class AnalyticsController {
    */
   static async getAdminAnalytics(req, res) {
     try {
-      // Check for validation errors
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        return validationErrorResponse(res, errors.array());
-      }
-
       const timeRange = {};
 
       if (req.query.start_date && req.query.end_date) {

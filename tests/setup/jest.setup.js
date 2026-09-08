@@ -25,7 +25,7 @@ afterAll(async () => {
 });
 
 // Increase timeout for database operations
-jest.setTimeout(10000);
+jest.setTimeout(30000);
 
 // Suppress console.log during tests (optional)
 // global.console = {

@@ -124,76 +124,6 @@ const validateProfileUpdate = [
 ];
 
 /**
- * URL creation validation
- */
-const validateUrlCreation = [
-  body("title")
-    .optional({ values: "falsy" })
-    .isString()
-    .withMessage("Title must be a string")
-    .bail()
-    .trim()
-    .isLength({ max: 200 })
-    .withMessage("Title cannot exceed 200 characters")
-    .bail(),
-
-  // Description (optional)
-  body("description")
-    .optional({ values: "falsy" })
-    .isString()
-    .withMessage("Description must be a string")
-    .bail()
-    .trim()
-    .isLength({ max: 500 })
-    .withMessage("Description cannot exceed 500 characters")
-    .bail(),
-
-  body("long_url")
-    .trim()
-    .notEmpty()
-    .withMessage("URL is required")
-    .bail()
-    .isURL({
-      protocols: ["http", "https"],
-      require_protocol: true,
-    })
-    .withMessage("Please provide a valid URL with http or https protocol")
-    .bail()
-    .isLength({ max: 2048 })
-    .withMessage("URL is too long (maximum 2048 characters)")
-    .bail(),
-
-  body("expires_at")
-    .optional()
-    .isISO8601()
-    .withMessage("Expiration date must be a valid ISO 8601 date")
-    .bail()
-    .custom((value) => {
-      if (new Date(value) <= new Date()) {
-        throw new Error("Expiration date must be in the future");
-      }
-      return true;
-    })
-    .bail(),
-];
-
-/**
- * Short code parameter validation
- */
-const validateShortCode = [
-  param("shortCode")
-    .trim()
-    .notEmpty()
-    .withMessage("shortCode is required")
-    .bail()
-    .isLength({ min: 1, max: 20 })
-    .withMessage("Short code must be between 1 and 20 characters")
-    .bail()
-    .matches(/^[a-zA-Z0-9]+$/)
-    .withMessage("Short code can only contain letters and numbers"),
-];
-
-/**
  * Analytics time range validation
  */
 const validateAnalyticsTimeRange = [
@@ -233,8 +163,6 @@ const validateBulkDelete = [
 module.exports = {
   validateUserRegistration,
   validateUserLogin,
-  validateUrlCreation,
-  validateShortCode,
   validateAnalyticsTimeRange,
   validateProfileUpdate,
   validateChangePassword,

@@ -1,14 +1,10 @@
-const { MongoMemoryServer } = require("mongodb-memory-server");
 const mongoose = require("mongoose");
-
-let mongoServer;
 
 // Setup test database before all tests
 const setupTestDB = async () => {
   try {
-    // Create in-memory MongoDB instance
-    mongoServer = await MongoMemoryServer.create();
-    const mongoUri = mongoServer.getUri();
+
+    const mongoUri = process.env.MONGODB_URI;
 
     // Override the MONGODB_URI for tests
     process.env.MONGODB_URI = mongoUri;
@@ -19,7 +15,7 @@ const setupTestDB = async () => {
     console.log("Test database connected");
   } catch (error) {
     console.error("Test database setup failed:", error);
-    process.exit(1);
+    throw error;
   }
 };
 
@@ -28,10 +24,6 @@ const teardownTestDB = async () => {
   try {
     if (mongoose.connection.readyState !== 0) {
       await mongoose.disconnect();
-    }
-
-    if (mongoServer) {
-      await mongoServer.stop();
     }
 
     console.log("Test database disconnected");

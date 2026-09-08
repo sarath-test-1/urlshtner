@@ -75,7 +75,7 @@ const urlCreationLimiter = createRateLimiter({
  */
 const authLimiter = createRateLimiter({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // 5 attempts per 15 minutes
+  max: 50, // 5 attempts per 15 minutes, change to 5 later. TO DO
   message: "Too many authentication attempts, please try again later",
   skipSuccessfulRequests: true, // Don't count successful requests
   keyGenerator: (req, res) => ipKeyGenerator(req.ip), // Safe IP handling
@@ -86,7 +86,7 @@ const authLimiter = createRateLimiter({
  */
 const registrationLimiter = createRateLimiter({
   windowMs: 60 * 60 * 1000, // 1 hour
-  max: 3, // 3 registrations per hour per IP
+  max: 50, // 3 registrations per hour per IP, change to 3 later. TO DO
   message: "Too many registration attempts, please try again later",
 });
 
@@ -95,7 +95,7 @@ const registrationLimiter = createRateLimiter({
  */
 const passwordResetLimiter = createRateLimiter({
   windowMs: 60 * 60 * 1000, // 1 hour
-  max: 3, // 3 password reset attempts per hour
+  max: 50, // 3 password reset attempts per hour, change to 3 later. TO DO
   message: "Too many password reset attempts, please try again later",
 });
 

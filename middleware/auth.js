@@ -8,6 +8,7 @@ const { errorResponse, unauthorizedResponse } = require("../utils/apiResponse");
 const authenticateToken = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
+
     const token = authHeader && authHeader.split(" ")[1]; // Bearer token
 
     if (!token) {
@@ -21,12 +22,13 @@ const authenticateToken = async (req, res, next) => {
       return unauthorizedResponse(res, "Invalid or expired token");
     }
 
-    if (
-      user.passwordChangedAt &&
-      decoded.iat * 1000 < user.passwordChangedAt.getTime()
-    ) {
-      return unauthorizedResponse(res, "Token expired");
-    }
+    // TO DO
+    // if (
+    //   user.passwordChangedAt &&
+    //   decoded.iat * 1000 < user.passwordChangedAt.getTime()
+    // ) {
+    //   return unauthorizedResponse(res, "Token expired");
+    // }
 
     // Attach user to request object
     req.user = user;
@@ -86,25 +88,86 @@ const verifyRefreshToken = async (req, res, next) => {
 /**
  * Optional authentication - doesn't fail if no token
  */
-const optionalAuth = async (req, res, next) => {
+const strictOptionalAuth = async (req, res, next) => {
+  // Token present + invalid → 401
+  // Token present + valid → authenticated
+  // Token absent → guest
+
+  const authHeader = req.headers.authorization;
+  const token = authHeader && authHeader.split(" ")[1]; // Bearer token
+
+  // No token → guest access allowed
+  if (!token) {
+    return next();
+  }
+
   try {
-    const authHeader = req.headers.authorization;
-    const token = authHeader && authHeader.split(" ")[1]; // Bearer token
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const user = await User.findById(decoded.userId).select("-password");
 
-    if (token) {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      const user = await User.findById(decoded.userId).select("-password");
-
-      if (user && user.isActive) {
-        req.user = user;
-        req.userId = user._id.toString();
-      }
+    if (!user || !user.isActive) {
+      return unauthorizedResponse(res, "Invalid or expired token");
     }
 
+    req.user = user;
+    req.userId = user._id.toString();
     next();
   } catch (error) {
-    // Continue without authentication if token is invalid
+    // if the token is expired or invalid means the user's intention is to create url into his acount so can't consider this as opional auth
+    if (error.name === "JsonWebTokenError") {
+      return unauthorizedResponse(res, "Invalid token");
+    } else if (error.name === "TokenExpiredError") {
+      return unauthorizedResponse(res, "Token expired");
+    }
+    return unauthorizedResponse(res, "Authentication failed");
+  }
+};
+
+/**
+ * Verify JWT token and authenticate admin
+ */
+const requireAdmin = async (req, res, next) => {
+  try {
+    const authHeader = req.headers.authorization;
+
+    const token = authHeader && authHeader.split(" ")[1]; // Bearer token
+
+    if (!token) {
+      return unauthorizedResponse(res, "Access token is required");
+    }
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    // Find user and check if still active
+    const user = await User.findById(decoded.userId).select("-password");
+    if (!user || !user.isActive) {
+      return unauthorizedResponse(res, "Invalid or expired token");
+    }
+
+    if (user.role !== "admin") {
+      return unauthorizedResponse(res, "Admin access only");
+    }
+
+    // TO DO
+    // if (
+    //   user.passwordChangedAt &&
+    //   decoded.iat * 1000 < user.passwordChangedAt.getTime()
+    // ) {
+    //   return unauthorizedResponse(res, "Token expired");
+    // }
+
+    // Attach user to request object
+    req.user = user;
+    req.userId = user._id.toString();
     next();
+  } catch (error) {
+    if (error.name === "JsonWebTokenError") {
+      return unauthorizedResponse(res, "Invalid token");
+    } else if (error.name === "TokenExpiredError") {
+      return unauthorizedResponse(res, "Token expired");
+    } else {
+      console.error("Auth middleware error:", error);
+      return errorResponse(res, "Authentication failed");
+    }
   }
 };
 
@@ -121,20 +184,21 @@ const generateToken = (userId, expiresIn = "15m") => {
 /**
  * Generate JWT refresh token
  */
-const generateRefreshToken = (userId, expiresIn = "15m") => {
+const generateRefreshToken = (userId, expiresIn = "30d") => {
   return jwt.sign(
     { userId: userId.toString() },
     process.env.JWT_REFRESH_SECRET,
     {
       algorithm: "HS256",
       expiresIn: expiresIn,
-    }
+    },
   );
 };
 
 module.exports = {
   authenticateToken,
-  optionalAuth,
+  strictOptionalAuth,
+  requireAdmin,
   generateToken,
   generateRefreshToken,
   verifyRefreshToken,

@@ -1,90 +1,156 @@
+const mongoose = require("mongoose");
 const Url = require("../models/Url");
 const User = require("../models/User");
 const Click = require("../models/Click");
-const { generateBase62 } = require("../utils/base62");
+const {
+  cacheShortUrl,
+  invalidateUrlCache,
+  bulkInvalidateUrlCache,
+} = require("./cacheService");
 const { getRedisClient } = require("../config/redis");
-const { scanAndDelete } = require("../utils/redisScanDelete");
+const { analyticsCleanupQueue } = require("../queues/analyticsCleanup.queue");
+var base62 = require("base62-random");
+const logger = require("../utils/logger");
 
 class UrlService {
   /**
    * Create a short URL
    */
+  //   static async createShortUrl(userId, longUrl, meta = {}, expiresAt = null) {
+  //     try {
+  //       // Generate unique short code
+  //       let shortCode;
+  //       let isUnique = false;
+  //       let attempts = 0;
+  //       const maxAttempts = 10;
+
+  //       while (!isUnique && attempts < maxAttempts) {
+  //         shortCode = base62(parseInt(process.env.SHORT_URL_LENGTH) || 6);
+  //         const existingUrl = await Url.findOne({ shortCode });
+  //         if (!existingUrl) {
+  //           isUnique = true;
+  //         }
+  //         attempts++;
+  //       }
+
+  //       if (!isUnique) {
+  //         throw new Error("Failed to generate unique short code");
+  //       }
+
+  //       // Create URL document
+  //       const urlData = {
+  //         userId,
+  //         shortCode,
+  //         longUrl,
+  //         title: meta.title || "",
+  //         description: meta.description || "",
+  //         expiresAt: expiresAt ? new Date(expiresAt) : null,
+  //       };
+
+  //       const url = new Url(urlData);
+  //       await url.save();
+
+  //       // Update user's URL count
+  //       if (userId) {
+  //         await User.findByIdAndUpdate(userId, { $inc: { totalUrls: 1 } });
+  //       }
+
+  //       // Cache the URL in Redis for faster access
+  //       const redisClient = getRedisClient();
+  //       if (redisClient) {
+  //         try {
+  //           const cacheData = {
+  //             longUrl: url.longUrl,
+  //             userId: url.userId.toString(),
+  //             isActive: url.isActive,
+  //             expiresAt: url.expiresAt,
+  //           };
+
+  //           // Set cache with TTL (24 hours or until expiration)
+  //           const ttl = url.expiresAt
+  //             ? Math.floor((new Date(url.expiresAt) - new Date()) / 1000)
+  //             : 24 * 60 * 60; // 24 hours
+
+  //           // If expiresAt is past, TTL becomes negative.
+  //           if (ttl > 0) {
+  //             await redisClient.setEx(
+  //               `url:${shortCode}`,
+  //               ttl,
+  //               JSON.stringify(cacheData)
+  //             );
+  //           }
+  //         } catch (cacheError) {
+  //           console.error("Redis cache error:", cacheError);
+  //           // Continue without cache
+  //         }
+  //       }
+
+  //       if (redisClient) {
+  //         await scanAndDelete(redisClient, "analytics:admin:*");
+  //       }
+
+  //       return url;
+  //     } catch (error) {
+  //       throw new Error(`Failed to create short URL: ${error.message}`);
+  //     }
+  //   }
+
+  /**
+   * Create a short URL
+   */
   static async createShortUrl(userId, longUrl, meta = {}, expiresAt = null) {
-    try {
-      // Generate unique short code
-      let shortCode;
-      let isUnique = false;
-      let attempts = 0;
-      const maxAttempts = 10;
+    // A transaction would pair Url.create + User.findByIdAndUpdate atomically, but the tradeoff isn't worth it here because:
+    // totalUrls is a denormalized counter — it's derived data, not source of truth. If it's off by 1, it's not catastrophic.
+    // Transactions add latency on every URL creation, which is your most frequent write operation.
+    // You can always recompute totalUrls via Url.countDocuments({ userId }) if needed.
 
-      while (!isUnique && attempts < maxAttempts) {
-        shortCode = generateBase62(parseInt(process.env.SHORT_URL_LENGTH) || 6);
-        const existingUrl = await Url.findOne({ shortCode });
-        if (!existingUrl) {
-          isUnique = true;
+    const LENGTH = parseInt(process.env.SHORT_URL_LENGTH, 10) || 6;
+    const MAX_ATTEMPTS = 5;
+
+    for (let attempts = 0; attempts < MAX_ATTEMPTS; attempts++) {
+      const shortCode = base62(LENGTH);
+
+      try {
+        const url = await Url.create({
+          userId,
+          shortCode,
+          longUrl,
+          title: meta.title || "",
+          description: meta.description || "",
+          expiresAt: expiresAt ? new Date(expiresAt) : null,
+        });
+
+        // Update user's URL count (fire & forget)
+        if (userId) {
+          User.findByIdAndUpdate(userId, { $inc: { totalUrls: 1 } }).catch(
+            (err) => {
+              logger.warn({
+                message: "Failed to increment totalUrls",
+                userId,
+                error: err.message,
+              });
+            },
+          );
         }
-        attempts++;
-      }
 
-      if (!isUnique) {
-        throw new Error("Failed to generate unique short code");
-      }
+        // Cache in Redis
+        cacheShortUrl(url); // fire-and-forget is fine for this project
 
-      console.log("meta");
-      console.log(meta);
-      // Create URL document
-      const urlData = {
-        userId,
-        shortCode,
-        longUrl,
-        title: meta.title || "",
-        description: meta.description || "",
-        expiresAt: expiresAt ? new Date(expiresAt) : null,
-      };
-
-      const url = new Url(urlData);
-      await url.save();
-
-      // Update user's URL count
-      await User.findByIdAndUpdate(userId, { $inc: { totalUrls: 1 } });
-
-      // Cache the URL in Redis for faster access
-      const redisClient = getRedisClient();
-      if (redisClient) {
-        try {
-          const cacheData = {
-            longUrl: url.longUrl,
-            userId: url.userId.toString(),
-            isActive: url.isActive,
-            expiresAt: url.expiresAt,
-          };
-
-          // Set cache with TTL (24 hours or until expiration)
-          const ttl = url.expiresAt
-            ? Math.floor((new Date(url.expiresAt) - new Date()) / 1000)
-            : 24 * 60 * 60; // 24 hours
-
-          if (ttl > 0) {
-            await redisClient.setEx(
-              `url:${shortCode}`,
-              ttl,
-              JSON.stringify(cacheData)
-            );
-          }
-        } catch (cacheError) {
-          console.error("Redis cache error:", cacheError);
-          // Continue without cache
+        return url;
+      } catch (err) {
+        // Retry only on duplicate shortCode
+        if (err.code !== 11000) {
+          throw new Error(`Failed to create short URL: ${err.message}`);
         }
-      }
 
-      if (redisClient) {
-        await scanAndDelete(redisClient, "analytics:admin:*");
+        // if it's a duplicate, you silently retry with no delay.
+        // At scale, 5 rapid retries under high collision probability just hammers the DB. so add a small jitter:
+        // small backoff before retry
+        await new Promise((res) => setTimeout(res, Math.random() * 50));
       }
-
-      return url;
-    } catch (error) {
-      throw new Error(`Failed to create short URL: ${error.message}`);
     }
+
+    throw new Error("Failed to generate unique short code after retries");
   }
 
   /**
@@ -112,11 +178,14 @@ class UrlService {
               };
             } else {
               // Remove expired cache entry
-              await redisClient.del(`url:${shortCode}`);
+              await invalidateUrlCache(shortCode);
             }
           }
         } catch (cacheError) {
-          console.error("Redis cache error:", cacheError);
+          logger.warn({
+            message: "Redis cache error",
+            error: cacheError.message,
+          });
         }
       }
 
@@ -146,11 +215,14 @@ class UrlService {
             await redisClient.setEx(
               `url:${shortCode}`,
               ttl,
-              JSON.stringify(cacheData)
+              JSON.stringify(cacheData),
             );
           }
         } catch (cacheError) {
-          console.error("Redis cache update error:", cacheError);
+          logger.warn({
+            message: "Redis cache update error:",
+            error: cacheError.message,
+          });
         }
       }
 
@@ -214,28 +286,33 @@ class UrlService {
               await redisClient.setEx(
                 `url:${shortCode}`,
                 ttl,
-                JSON.stringify(urlCacheData)
+                JSON.stringify(urlCacheData),
               );
             }
           }
         } catch (cacheError) {
-          console.error("Cache update error:", cacheError);
-        }
-
-        try {
-          await scanAndDelete(redisClient, `analytics:user:${url.userId}:*`);
-        } catch (err) {
-          console.error("Analytics cache clear error:", err);
+          logger.warn({
+            message: "Cache update error:",
+            error: cacheError.message,
+          });
         }
       }
 
-      if (redisClient) {
-        await scanAndDelete(redisClient, "analytics:admin:*");
-      }
+      analyticsCleanupQueue.add("cleanup", {
+        pattern: `analytics:user:${url.userId}:*`,
+      });
+
+      analyticsCleanupQueue.add("cleanup", {
+        pattern: "analytics:admin:*",
+      });
 
       return click;
     } catch (error) {
-      console.error("Click recording error:", error);
+      logger.error({
+        message: "Click recording failed",
+        shortCode,
+        error: error.message,
+      });
       // Don't throw error as this shouldn't break URL redirection
     }
   }
@@ -268,38 +345,27 @@ class UrlService {
       }
 
       // Get URLs with pagination
-
-      //   old
-      //   const urls = await Url.find(filter)
-      //     .sort(sortOptions)
-      //     .skip(skip)
-      //     .limit(parseInt(limit))
-      //     .lean();
-
-      //   // Get total count for pagination
-      //   const total = await Url.countDocuments(filter);
-      // old end
-
-      const query = Url.findActive().where(filter);
-
-      const urls = await query
+      const urls = await Url.find(filter)
+        .select(
+          "userId shortCode longUrl clickCount isActive expiresAt lastAccessedAt title description createdAt",
+        )
         .sort(sortOptions)
         .skip(skip)
         .limit(parseInt(limit))
         .lean();
 
-      // Prevents expired URLs from showing in dashboard
-      // Prevents pagination mismatch
-      const total = await Url.findActive().where(filter).countDocuments();
+      // Get total count for pagination
+      const total = await Url.countDocuments(filter);
 
       return {
         urls,
-        pagination: {
-          currentPage: parseInt(page),
-          totalPages: Math.ceil(total / limit),
-          totalUrls: total,
-          hasNext: page * limit < total,
-          hasPrev: page > 1,
+        meta: {
+          current_page: page,
+          per_page: limit,
+          total,
+          last_page: Math.ceil(total / limit),
+          from: total === 0 ? null : (page - 1) * limit + 1,
+          to: Math.min(page * limit, total),
         },
       };
     } catch (error) {
@@ -321,30 +387,16 @@ class UrlService {
         is_active: "isActive",
       };
 
-      let hasUpdates = false;
-
       for (const [apiField, modelField] of Object.entries(FIELD_MAP)) {
         if (updateData[apiField] !== undefined) {
           url[modelField] = updateData[apiField];
-          hasUpdates = true;
         }
       }
 
-      if (!hasUpdates) {
-        throw new Error("No valid updates provided");
-      }
-
-      await url.save(); // single DB write, validators run
+      await url.save();
 
       // Invalidate cache
-      const redisClient = getRedisClient();
-      if (redisClient) {
-        try {
-          await redisClient.del(`url:${url.shortCode}`);
-        } catch (cacheError) {
-          console.error("Cache deletion error:", cacheError);
-        }
-      }
+      await invalidateUrlCache(url.shortCode);
 
       return url;
     } catch (error) {
@@ -355,85 +407,68 @@ class UrlService {
   /**
    * Delete URL
    */
-  static async deleteUrl(urlId, userId) {
+  static async deleteUrl(url, user) {
+    const session = await mongoose.startSession();
+
     try {
-      const url = await Url.findOne({ _id: urlId, userId });
+      await session.withTransaction(async () => {
+        // 1. Delete URL document
+        await url.deleteOne({ session });
 
-      if (!url) {
-        throw new Error("URL not found");
-      }
+        // 2. Delete related clicks
+        await Click.deleteMany({ urlId: url._id }).session(session);
 
-      // Delete URL and related clicks
-      await Url.findByIdAndDelete(urlId);
-      await Click.deleteMany({ urlId });
-
-      // Update user's URL count
-      await User.findByIdAndUpdate(userId, {
-        $inc: {
-          totalUrls: -1,
-          totalClicks: -url.clickCount,
-        },
+        // 3. Update user stats
+        await User.findByIdAndUpdate(user._id, {
+          $inc: {
+            totalUrls: -1,
+            totalClicks: -url.clickCount,
+          },
+        }).session(session);
       });
 
-      // Remove from cache
-      const redisClient = getRedisClient();
-      if (redisClient) {
-        try {
-          await redisClient.del(`url:${url.shortCode}`);
-        } catch (cacheError) {
-          console.error("Cache deletion error:", cacheError);
-        }
-      }
-
-      if (redisClient) {
-        await scanAndDelete(redisClient, "analytics:admin:*");
-      }
+      // 4. Cache cleanup AFTER transaction commits
+      await invalidateUrlCache(url.shortCode);
+      analyticsCleanupQueue.add("cleanup", { pattern: "analytics:admin:*" });
 
       return { message: "URL deleted successfully" };
     } catch (error) {
       throw new Error(`Failed to delete URL: ${error.message}`);
+    } finally {
+      await session.endSession();
     }
   }
 
   /**
    * Bulk delete URLs
    */
-  static async bulkDeleteUrls(urlIds, userId) {
+  static async bulkDeleteUrls(urls, userId) {
+    const session = await mongoose.startSession();
+
     try {
-      // Find URLs to delete
-      const urls = await Url.find({ _id: { $in: urlIds }, userId });
-
-      if (urls.length === 0) {
-        throw new Error("No URLs found to delete");
-      }
-
+      const urlIds = urls.map((u) => u._id);
+      const shortCodes = urls.map((u) => u.shortCode);
       const totalClicks = urls.reduce((sum, url) => sum + url.clickCount, 0);
-      const shortCodes = urls.map((url) => url.shortCode);
 
-      // Delete URLs and related clicks
-      await Url.deleteMany({ _id: { $in: urlIds }, userId });
-      await Click.deleteMany({ urlId: { $in: urlIds } });
+      await session.withTransaction(async () => {
+        await Url.deleteMany({ _id: { $in: urlIds } }).session(session);
+        await Click.deleteMany({ urlId: { $in: urlIds } }).session(session);
 
-      // Update user's counts
-      await User.findByIdAndUpdate(userId, {
-        $inc: {
-          totalUrls: -urls.length,
-          totalClicks: -totalClicks,
-        },
+        await User.findByIdAndUpdate(userId, {
+          $inc: {
+            totalUrls: -urls.length,
+            totalClicks: -totalClicks,
+          },
+        }).session(session);
       });
 
-      // Remove from cache
-      const redisClient = getRedisClient();
-      if (redisClient) {
-        try {
-          const cacheKeys = shortCodes.map((code) => `url:${code}`);
-          if (cacheKeys.length > 0) {
-            await redisClient.del(cacheKeys);
-          }
-        } catch (cacheError) {
-          console.error("Bulk cache deletion error:", cacheError);
-        }
+      // Cache invalidation after transaction commits
+      const cacheKeys = shortCodes.map((code) => `url:${code}`);
+      if (cacheKeys.length > 0) {
+        await bulkInvalidateUrlCache(cacheKeys);
       }
+
+      analyticsCleanupQueue.add("cleanup", { pattern: "analytics:admin:*" });
 
       return {
         message: `Successfully deleted ${urls.length} URLs`,
@@ -441,27 +476,8 @@ class UrlService {
       };
     } catch (error) {
       throw new Error(`Failed to bulk delete URLs: ${error.message}`);
-    }
-  }
-
-  /**
-   * Get URL details
-   */
-  static async getUrlDetails(urlId, userId) {
-    try {
-      //   const url = await Url.findOne({ _id: urlId, userId });
-
-      // Prevents viewing expired URLs via direct ID access
-      // Consistent behavior with list view
-      const url = await Url.findActive().findOne({ _id: urlId, userId });
-
-      if (!url) {
-        throw new Error("URL not found");
-      }
-
-      return url;
-    } catch (error) {
-      throw new Error(`Failed to get URL details: ${error.message}`);
+    } finally {
+      await session.endSession();
     }
   }
 }

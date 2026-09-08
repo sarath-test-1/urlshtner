@@ -56,14 +56,15 @@ const userSchema = new mongoose.Schema(
     timestamps: true,
     toJSON: { virtuals: true },
     toObject: { virtuals: true },
-  }
+  },
 );
 
 // Create indexes
-userSchema.index({ name: 1 });
-userSchema.index({ role: 1 });
-userSchema.index({ isActive: 1 });
-userSchema.index({ createdAt: -1 });
+userSchema.index({ totalClicks: -1 });
+userSchema.index({ totalUrls: 1 });
+userSchema.index({ passwordChangedAt: 1 });
+userSchema.index({ isActive: 1, createdAt: -1 });
+userSchema.index({ isActive: 1, role: 1 });
 
 // Hash password before saving
 userSchema.pre("save", async function (next) {
