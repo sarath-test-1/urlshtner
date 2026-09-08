@@ -21,9 +21,6 @@ pids
 *.seed
 *.pid.lock
 
-# tests
-tests/
-
 # Coverage directory used by tools like istanbul
 coverage/
 
