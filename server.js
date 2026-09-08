@@ -17,7 +17,7 @@ const requiredEnvVars = [
   "PORT",
   "BASE_URL",
 
-  "ADMIN_NAME",
+  // "ADMIN_NAME",
   "ADMIN_EMAIL",
   "ADMIN_PASSWORD",
 
