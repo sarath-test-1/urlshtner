@@ -11,9 +11,11 @@
 #     polls until it's PRIMARY. No auth (matches your local test setup).
 #   - Redis: this app DOES need a real Redis instance for integration tests,
 #     AND it requires auth (REDIS_PASSWORD/REDIS_USERNAME in your .env).
-#     The official redis:7-alpine image has no clean way to set a password
-#     via the `services:` block (no `command:` override support in Actions),
-#     so we use bitnami/redis, which reads REDIS_PASSWORD as an env var.
+#     `services:` can't pass a `--requirepass` argument (no command override
+#     support), and bitnami/redis's versioned tags (e.g. 7.2) no longer
+#     exist since Bitnami's move to sha256-only "Secure Images" tagging —
+#     so Redis is started the same way as Mongo: a manual `docker run` step
+#     with `redis:7-alpine`, passing --requirepass directly as a CLI arg.
 #   - The Redis password below is a throwaway value that only exists inside
 #     this ephemeral CI container — not a real secret — so it's inlined
 #     rather than stored as a GitHub secret. Happy to switch it to a repo
@@ -50,22 +52,9 @@ jobs:
     outputs:
       coverage-pct: ${{ steps.coverage.outputs.pct }}
 
-    # ── Service Containers ────────────────────────────────────────────────────
-    # Only Redis runs here — Mongo needs a post-start init command
-    # (rs.initiate()), which `services:` can't do, so it's started as a
-    # regular step below instead.
-    services:
-      redis:
-        image: bitnami/redis:7.2
-        env:
-          REDIS_PASSWORD: ci_test_redis_password
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd "redis-cli -a ci_test_redis_password ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
+    # No `services:` block — both Mongo and Redis are started manually as
+    # steps below, since neither can be configured the way this app needs
+    # via GitHub Actions' service-container syntax (see header comment).
 
     steps:
       - name: Checkout code
@@ -88,6 +77,24 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      # ── Start Redis (with auth) ───────────────────────────────────────────
+      # Matches your .env's REDIS_PASSWORD/REDIS_USERNAME setup.
+      - name: Start Redis
+        run: |
+          docker run -d \
+            --name redis-test \
+            -p 6379:6379 \
+            redis:7-alpine redis-server --requirepass ci_test_redis_password
+
+          echo "Waiting for Redis to accept connections..."
+          for i in $(seq 1 15); do
+            if docker exec redis-test redis-cli -a ci_test_redis_password ping > /dev/null 2>&1; then
+              echo "Redis is up."
+              break
+            fi
+            sleep 2
+          done
 
       # ── Start MongoDB as a single-node replica set ────────────────────────
       # Transactions require a replica set even with one node. `docker run`
@@ -160,6 +167,8 @@ jobs:
           path: coverage/
           retention-days: 7
 
-      - name: Stop MongoDB
+      - name: Stop test containers
         if: always()
-        run: docker rm -f mongo-test || true
+        run: |
+          docker rm -f mongo-test || true
+          docker rm -f redis-test || true

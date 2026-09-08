@@ -111,7 +111,9 @@ jobs:
   # didn't depend on the DB. That trick would NOT work here — the container
   # would exit before /health ever responds.
   #
-  # Fix: real Mongo + Redis service containers below, and the smoke-tested
+  # Fix: real Mongo service container + a manually-started Redis container
+  # below (bitnami/redis's versioned tags no longer exist — see
+  # reusable-test.yml's header comment for details), and the smoke-tested
   # container is run with `--network host` so "localhost" inside it actually
   # resolves to the runner (and therefore to these services). `-p` port
   # mapping is dropped since host networking exposes the port directly.
@@ -134,18 +136,6 @@ jobs:
           - 27017:27017
         options: >-
           --health-cmd "mongosh --eval 'db.adminCommand(\"ping\")' -u admin -p ci_test_mongo_password --authenticationDatabase admin"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
-      redis:
-        image: bitnami/redis:7.2
-        env:
-          REDIS_PASSWORD: ci_test_redis_password
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd "redis-cli -a ci_test_redis_password ping"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
@@ -176,6 +166,26 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      # ── Start Redis (with auth) ───────────────────────────────────────────
+      # Manual docker run, not `services:` — see reusable-test.yml's header
+      # comment for why (no --requirepass support via services, and
+      # bitnami/redis no longer has usable versioned tags).
+      - name: Start Redis
+        run: |
+          docker run -d \
+            --name redis-test \
+            -p 6379:6379 \
+            redis:7-alpine redis-server --requirepass ci_test_redis_password
+
+          echo "Waiting for Redis to accept connections..."
+          for i in $(seq 1 15); do
+            if docker exec redis-test redis-cli -a ci_test_redis_password ping > /dev/null 2>&1; then
+              echo "Redis is up."
+              break
+            fi
+            sleep 2
+          done
+
       # ── Smoke test the Docker image ───────────────────────────────────────
       # --network host: lets the container reach the Mongo/Redis service
       # containers via localhost (see the deviation note above).
@@ -202,6 +212,12 @@ jobs:
             (docker logs ci-test && exit 1)
 
           echo "✅ Docker smoke test passed"
+
+      - name: Stop test containers
+        if: always()
+        run: |
+          docker rm -f ci-test || true
+          docker rm -f redis-test || true
 
       - name: Write job summary
         run: |
