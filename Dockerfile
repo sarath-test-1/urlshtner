@@ -16,7 +16,12 @@ RUN npm ci --omit=dev
 COPY . .
 
 # Run as a non-root user — small security best practice, cheap to add.
-RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+# The app writes rotating logs to ./logs at runtime (winston-daily-rotate-
+# file), so that directory needs to exist and be owned by appuser BEFORE
+# we switch to it — otherwise mkdir('/app/logs') fails with EACCES.
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup \
+  && mkdir -p /app/logs \
+  && chown -R appuser:appgroup /app
 USER appuser
 
 EXPOSE 5000
