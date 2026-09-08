@@ -194,6 +194,9 @@ jobs:
       # ── Smoke test the Docker image ───────────────────────────────────────
       # --network host: lets the container reach the Mongo/Redis service
       # containers via localhost (see the deviation note above).
+      # NOTE: the app validates a set of required env vars at startup and
+      # exits before app.listen() if any are missing — these are all
+      # throwaway CI values, not real secrets.
       - name: Smoke test Docker image
         run: |
           docker run -d \
@@ -203,6 +206,15 @@ jobs:
             -e PORT=5000 \
             -e BASE_URL=http://localhost:5000 \
             -e MONGODB_URI="mongodb://admin:ci_test_mongo_password@localhost:27017/urlshortener?authSource=admin" \
+            -e ADMIN_EMAIL=admin@example.com \
+            -e ADMIN_PASSWORD=ci_test_admin_password \
+            -e JWT_SECRET=ci_test_jwt_secret \
+            -e JWT_REFRESH_SECRET=ci_test_jwt_refresh_secret \
+            -e JWT_EXPIRE=1h \
+            -e RATE_LIMIT_WINDOW_MS=900000 \
+            -e RATE_LIMIT_MAX_REQUESTS=100 \
+            -e SHORT_URL_LENGTH=6 \
+            -e SERVER_NAME=url-shortener-ci \
             -e REDIS_HOST=localhost \
             -e REDIS_PORT=6379 \
             -e REDIS_USERNAME=default \
