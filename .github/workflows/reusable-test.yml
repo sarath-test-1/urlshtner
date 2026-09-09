@@ -169,8 +169,8 @@ jobs:
       # Mongo: real single-node replica set started above, no auth.
       # Redis: hits the real service container, using the same env var
       # names as your .env (REDIS_HOST/REDIS_PORT/REDIS_USERNAME/REDIS_PASSWORD).
-      - name: Run integration tests
-        run: npm run test:integration
+      - name: Run auth integration tests
+        run: npm run test:auth
         env:
           NODE_ENV: test
           MONGODB_URI: "mongodb://127.0.0.1:27017/url_shortener_test?replicaSet=rs0"
@@ -188,6 +188,87 @@ jobs:
           JWT_EXPIRE: 7d
           RATE_LIMIT_WINDOW_MS: 60000
           RATE_LIMIT_MAX_REQUESTS: 10000
+
+      - name: Run users integration tests
+        run: npm run test:users
+        env:
+          NODE_ENV: test
+          MONGODB_URI: "mongodb://127.0.0.1:27017/url_shortener_test?replicaSet=rs0"
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
+          REDIS_USERNAME: default
+          REDIS_PASSWORD: ci_test_redis_password
+          REDIS_PROVIDER: local
+          BASE_URL: http://localhost:3000
+          # Throwaway values only used to sign test tokens in CI — not
+          # real secrets protecting anything, so inlined like the rest
+          # of this file rather than requiring two more repo secrets.
+          JWT_SECRET: ci_test_jwt_secret
+          JWT_REFRESH_SECRET: ci_test_jwt_refresh_secret
+          JWT_EXPIRE: 7d
+          RATE_LIMIT_WINDOW_MS: 60000
+          RATE_LIMIT_MAX_REQUESTS: 10000
+
+      - name: Run urls integration tests
+        run: npm run test:urls
+        env:
+          NODE_ENV: test
+          MONGODB_URI: "mongodb://127.0.0.1:27017/url_shortener_test?replicaSet=rs0"
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
+          REDIS_USERNAME: default
+          REDIS_PASSWORD: ci_test_redis_password
+          REDIS_PROVIDER: local
+          BASE_URL: http://localhost:3000
+          # Throwaway values only used to sign test tokens in CI — not
+          # real secrets protecting anything, so inlined like the rest
+          # of this file rather than requiring two more repo secrets.
+          JWT_SECRET: ci_test_jwt_secret
+          JWT_REFRESH_SECRET: ci_test_jwt_refresh_secret
+          JWT_EXPIRE: 7d
+          RATE_LIMIT_WINDOW_MS: 60000
+          RATE_LIMIT_MAX_REQUESTS: 10000
+
+      - name: Run redirect integration tests
+        run: npm run test:redirect
+        env:
+          NODE_ENV: test
+          MONGODB_URI: "mongodb://127.0.0.1:27017/url_shortener_test?replicaSet=rs0"
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
+          REDIS_USERNAME: default
+          REDIS_PASSWORD: ci_test_redis_password
+          REDIS_PROVIDER: local
+          BASE_URL: http://localhost:3000
+          # Throwaway values only used to sign test tokens in CI — not
+          # real secrets protecting anything, so inlined like the rest
+          # of this file rather than requiring two more repo secrets.
+          JWT_SECRET: ci_test_jwt_secret
+          JWT_REFRESH_SECRET: ci_test_jwt_refresh_secret
+          JWT_EXPIRE: 7d
+          RATE_LIMIT_WINDOW_MS: 60000
+          RATE_LIMIT_MAX_REQUESTS: 10000
+
+      - name: Run click-recording integration tests
+        run: npm run test:click-recording
+        env:
+          NODE_ENV: test
+          MONGODB_URI: "mongodb://127.0.0.1:27017/url_shortener_test?replicaSet=rs0"
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
+          REDIS_USERNAME: default
+          REDIS_PASSWORD: ci_test_redis_password
+          REDIS_PROVIDER: local
+          BASE_URL: http://localhost:3000
+          # Throwaway values only used to sign test tokens in CI — not
+          # real secrets protecting anything, so inlined like the rest
+          # of this file rather than requiring two more repo secrets.
+          JWT_SECRET: ci_test_jwt_secret
+          JWT_REFRESH_SECRET: ci_test_jwt_refresh_secret
+          JWT_EXPIRE: 7d
+          RATE_LIMIT_WINDOW_MS: 60000
+          RATE_LIMIT_MAX_REQUESTS: 10000
+
 
       # ── Extract coverage percentage ───────────────────────────────────────
       - name: Extract coverage percentage
