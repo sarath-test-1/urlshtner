@@ -12,10 +12,6 @@ yarn-error.log*
 .env.test.local
 .env.production.local
 
-#github
-dependabot.yml
-deploy.yml
-
 # Logs
 logs
 *.log
