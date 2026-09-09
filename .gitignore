@@ -12,6 +12,9 @@ yarn-error.log*
 .env.test.local
 .env.production.local
 
+#tests
+url.test.js
+
 # Logs
 logs
 *.log
