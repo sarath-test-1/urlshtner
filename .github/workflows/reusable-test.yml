@@ -117,7 +117,15 @@ jobs:
 
       - name: Initiate replica set
         run: |
-          docker exec mongo-test mongosh --quiet --eval "rs.initiate()"
+          # Explicit host here matters: without it, Mongo registers itself
+          # in the replica set config using its own Docker-assigned
+          # container hostname (e.g. "f7f623e1477f"), which the driver
+          # then tries to use for the real connection after the initial
+          # handshake — and that hostname doesn't resolve from the runner.
+          # Pin it to 127.0.0.1:27017 to match what's actually reachable
+          # (same host used in MONGODB_URI below).
+          docker exec mongo-test mongosh --quiet --eval \
+            "rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: '127.0.0.1:27017' }] })"
 
           echo "Waiting for replica set to elect a PRIMARY..."
           for i in $(seq 1 15); do
@@ -132,7 +140,11 @@ jobs:
       # NOTE: no lint step yet — see header comment.
 
       # ── Unit tests ─────────────────────────────────────────────────────────
-      # Fully mocked (DB + Redis) — no service dependency.
+      # NOTE: despite the name, these still need Mongo/Redis env vars —
+      # jest.setup.js's beforeAll/afterAll (DB connect/disconnect) are
+      # global hooks that run for every test file Jest picks up, not just
+      # integration tests. The "fully mocked, no service dependency"
+      # assumption in an earlier version of this comment was wrong.
       - name: Run unit tests
         run: npm run test:unit
         env:
@@ -149,32 +161,32 @@ jobs:
       # Mongo: real single-node replica set started above, no auth.
       # Redis: hits the real service container, using the same env var
       # names as your .env (REDIS_HOST/REDIS_PORT/REDIS_USERNAME/REDIS_PASSWORD).
-      # - name: Run integration tests
-      #   run: npm run test:integration
-      #   env:
-      #     NODE_ENV: test
-      #     MONGODB_URI: "mongodb://127.0.0.1:27017/url_shortener_test?replicaSet=rs0"
-      #     REDIS_HOST: localhost
-      #     REDIS_PORT: 6379
-      #     REDIS_USERNAME: default
-      #     REDIS_PASSWORD: ci_test_redis_password
-      #     REDIS_PROVIDER: local
+      - name: Run integration tests
+        run: npm run test:integration
+        env:
+          NODE_ENV: test
+          MONGODB_URI: "mongodb://127.0.0.1:27017/url_shortener_test?replicaSet=rs0"
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
+          REDIS_USERNAME: default
+          REDIS_PASSWORD: ci_test_redis_password
+          REDIS_PROVIDER: local
 
       # ── Extract coverage percentage ───────────────────────────────────────
-      # - name: Extract coverage percentage
-      #   id: coverage
-      #   run: |
-      #     PCT=$(npm run test:coverage -- --coverageReporters=text 2>/dev/null | grep "Lines" | awk '{print $3}' | tr -d '%' || echo "0")
-      #     echo "pct=${PCT}" >> $GITHUB_OUTPUT
-      #     echo "Coverage: ${PCT}%"
+      - name: Extract coverage percentage
+        id: coverage
+        run: |
+          PCT=$(npm run test:coverage -- --coverageReporters=text 2>/dev/null | grep "Lines" | awk '{print $3}' | tr -d '%' || echo "0")
+          echo "pct=${PCT}" >> $GITHUB_OUTPUT
+          echo "Coverage: ${PCT}%"
 
-      # - name: Upload coverage report
-      #   uses: actions/upload-artifact@v4
-      #   if: always()
-      #   with:
-      #     name: coverage-report-node-${{ inputs.node-version }}
-      #     path: coverage/
-      #     retention-days: 7
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report-node-${{ inputs.node-version }}
+          path: coverage/
+          retention-days: 7
 
       - name: Stop test containers
         if: always()
