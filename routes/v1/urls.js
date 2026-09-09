@@ -1,32 +1,32 @@
 const express = require("express");
-const Url = require("../models/Url");
-const UrlController = require("../controllers/urlController");
-const { authenticateToken, strictOptionalAuth } = require("../middleware/auth");
+const Url = require("../../models/Url");
+const UrlController = require("../../controllers/v1/urlController");
+const { authenticateToken, strictOptionalAuth } = require("../../middleware/auth");
 const {
   requireAdmin,
   requireOwnership,
   requireAllOwnership,
   canModifyResource,
-} = require("../middleware/rbac");
-const handleValidationErrors = require("../middleware/validation");
+} = require("../../middleware/rbac");
+const handleValidationErrors = require("../../middleware/validation");
 const {
   urlCreationLimiter,
   urlAccessLimiter,
   searchLimiter,
   bulkOperationsLimiter,
   generalLimiter,
-} = require("../middleware/rateLimiter");
+} = require("../../middleware/rateLimiter");
 
 const {
   validateUrlCreation,
   validateUrlId,
   validateUrlUpdate,
   validateBulkDeleteUrls,
-} = require("../request/validators/url-validators.js");
+} = require("../../request/validators/v1/url-validators.js");
 
 const {
   validateUrlsPagination,
-} = require("../request/validators/pagination-validators");
+} = require("../../request/validators/v1/pagination-validators");
 
 const router = express.Router();
 

@@ -1,10 +1,10 @@
-const AnalyticsService = require("../services/analyticsService");
+const AnalyticsService = require("../../services/v1/analyticsService");
 const {
   successResponse,
   errorResponse,
   validationErrorResponse,
   unauthorizedResponse,
-} = require("../utils/apiResponse");
+} = require("../../utils/apiResponse");
 
 class AnalyticsController {
   /**

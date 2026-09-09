@@ -133,8 +133,8 @@ jobs:
 
       # ── Unit tests ─────────────────────────────────────────────────────────
       # Fully mocked (DB + Redis) — no service dependency.
-      # - name: Run unit tests
-      #   run: npm run test:unit
+      - name: Run unit tests
+        run: npm run test:unit
 
       # ── Integration tests ─────────────────────────────────────────────────
       # Mongo: real single-node replica set started above, no auth.

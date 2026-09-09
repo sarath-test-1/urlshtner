@@ -1,5 +1,5 @@
-const User = require("../models/User");
-const UserService = require("../services/userService");
+const User = require("../../models/User");
+const UserService = require("../../services/v1/userService");
 const {
   successResponse,
   listingSuccessResponse,
@@ -7,7 +7,7 @@ const {
   validationErrorResponse,
   notFoundResponse,
   unauthorizedResponse,
-} = require("../utils/apiResponse");
+} = require("../../utils/apiResponse");
 
 class UserController {
   static async getUsers(req, res) {

@@ -1,9 +1,9 @@
 const mongoose = require("mongoose");
-const User = require("../models/User");
-const Url = require("../models/Url");
-const Click = require("../models/Click");
-const { getRedisClient } = require("../config/redis");
-const logger = require("../utils/logger");
+const User = require("../../models/User");
+const Url = require("../../models/Url");
+const Click = require("../../models/Click");
+const { getRedisClient } = require("../../config/redis");
+const logger = require("../../utils/logger");
 
 class AnalyticsService {
   /**

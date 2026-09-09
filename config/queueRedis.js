@@ -5,6 +5,8 @@ const provider = process.env.REDIS_PROVIDER || "upstash"; // "local" | "upstash"
 const connectionOptions = {
   maxRetriesPerRequest: null, // required by BullMQ workers
   enableReadyCheck: false,    // recommended, especially for Upstash
+  lazyConnect: true, // ← don't connect until something actually uses the queue. Unit tests never call welcomeEmailQueue.add(...),
+  // so with this change they'll never open a connection at all
 };
 
 const connection =
@@ -21,4 +23,4 @@ const connection =
 
 connection.on("error", (err) => console.error("BullMQ Redis connection error:", err.message));
 
-module.exports = { connection };
+module.exports = { connection, closeConnection: () => connection.quit(), };

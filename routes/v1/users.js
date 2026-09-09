@@ -1,23 +1,23 @@
 const express = require("express");
-const UserController = require("../controllers/userController");
-const { authenticateToken } = require("../middleware/auth");
-const handleValidationErrors = require("../middleware/validation");
-const { requireAdmin } = require("../middleware/rbac");
-const { authLimiter } = require("../middleware/rateLimiter");
+const UserController = require("../../controllers/v1/userController");
+const { authenticateToken } = require("../../middleware/auth");
+const handleValidationErrors = require("../../middleware/validation");
+const { requireAdmin } = require("../../middleware/rbac");
+const { authLimiter } = require("../../middleware/rateLimiter");
 const {
   validateUserId,
   validateUserUpdate,
-} = require("../request/validators/user-validators");
+} = require("../../request/validators/v1/user-validators");
 const {
   validatePagination,
-} = require("../request/validators/pagination-validators");
+} = require("../../request/validators/v1/pagination-validators");
 const {
   urlCreationLimiter,
   urlAccessLimiter,
   searchLimiter,
   bulkOperationsLimiter,
   generalLimiter,
-} = require("../middleware/rateLimiter");
+} = require("../../middleware/rateLimiter");
 
 const router = express.Router();
 

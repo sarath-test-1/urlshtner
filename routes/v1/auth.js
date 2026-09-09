@@ -1,20 +1,20 @@
 const express = require("express");
-const AuthController = require("../controllers/authController");
-const { authenticateToken, verifyRefreshToken } = require("../middleware/auth");
-const handleValidationErrors = require("../middleware/validation");
-const { requireAdmin } = require("../middleware/rbac");
+const AuthController = require("../../controllers/v1/authController");
+const { authenticateToken, verifyRefreshToken } = require("../../middleware/auth");
+const handleValidationErrors = require("../../middleware/validation");
+const { requireAdmin } = require("../../middleware/rbac");
 const {
   authLimiter,
   registrationLimiter,
   passwordResetLimiter,
-} = require("../middleware/rateLimiter");
+} = require("../../middleware/rateLimiter");
 const {
   validateUserRegistration,
   validateUserLogin,
   validateProfileUpdate,
   validateChangePassword,
   validateAccountDeactivation,
-} = require("../request/validators/auth-validators");
+} = require("../../request/validators/v1/auth-validators");
 
 const router = express.Router();
 

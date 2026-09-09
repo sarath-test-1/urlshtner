@@ -1,7 +1,7 @@
 const request = require("supertest");
 const app = require("../../app");
 const Url = require("../../models/Url");
-const UrlService = require("../../services/urlService");
+const UrlService = require("../../services/v1/urlService");
 const { createUserWithToken } = require("../setup/testHelpers");
 const { createTestUrl } = require("../setup/urlHelpers");
 

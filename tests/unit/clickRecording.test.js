@@ -1,7 +1,7 @@
 const Click = require("../../models/Click");
 const Url = require("../../models/Url");
 const User = require("../../models/User");
-const { recordClick } = require("../../services/urlService");
+const { recordClick } = require("../../services/v1/urlService");
 
 const {
   createTestUser,

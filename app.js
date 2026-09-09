@@ -12,13 +12,13 @@ const swaggerUi = require("swagger-ui-express");
 const swaggerSpec = require("./docs/swagger");
 
 // Import routes
-const authRoutes = require("./routes/auth");
-const urlRoutes = require("./routes/urls");
-const userRoutes = require("./routes/users");
-const analyticsRoutes = require("./routes/analytics");
+const authRoutes = require("./routes/v1/auth");
+const urlRoutes = require("./routes/v1/urls");
+const userRoutes = require("./routes/v1/users");
+const analyticsRoutes = require("./routes/v1/analytics");
 
 // Import controllers
-const UrlController = require("./controllers/urlController");
+const UrlController = require("./controllers/v1/urlController");
 
 // Import middleware
 const {
@@ -26,7 +26,7 @@ const {
   generalLimiter,
 } = require("./middleware/rateLimiter");
 
-const { validateShortCode } = require("./request/validators/url-validators");
+const { validateShortCode } = require("./request/validators/v1/url-validators");
 const { errorResponse } = require("./utils/apiResponse");
 
 const { createBullBoard } = require("@bull-board/api");

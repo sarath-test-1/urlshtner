@@ -1,9 +1,9 @@
 const UAParser = require("ua-parser-js");
 const requestIp = require("request-ip");
 const geoip = require("geoip-lite");
-const { recordClickQueue } = require("../queues/recordClick.queue");
+const { recordClickQueue } = require("../../queues/recordClick.queue");
 
-const UrlService = require("../services/urlService");
+const UrlService = require("../../services/v1/urlService");
 const {
   successResponse,
   listingSuccessResponse,
@@ -11,7 +11,7 @@ const {
   validationErrorResponse,
   notFoundResponse,
   unauthorizedResponse,
-} = require("../utils/apiResponse");
+} = require("../../utils/apiResponse");
 
 // Helper function to extract client info from request
 const extractClientInfo = (req) => {

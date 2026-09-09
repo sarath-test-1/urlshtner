@@ -1,9 +1,9 @@
-const AuthService = require("../services/authService");
+const AuthService = require("../../services/v1/authService");
 const {
   successResponse,
   errorResponse,
   unauthorizedResponse,
-} = require("../utils/apiResponse");
+} = require("../../utils/apiResponse");
 
 const REFRESH_COOKIE_OPTIONS = (isProduction) => ({
   httpOnly: true,

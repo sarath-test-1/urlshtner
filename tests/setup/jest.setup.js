@@ -1,5 +1,6 @@
 // Load test environment variables
 require("dotenv").config({ path: ".env.test" });
+const { closeConnection } = require("../../config/queueRedis");
 
 // Set NODE_ENV to test if not already set
 if (!process.env.NODE_ENV) {
@@ -22,6 +23,7 @@ beforeEach(async () => {
 // Cleanup database after all tests
 afterAll(async () => {
   await teardownTestDB();
+  await closeConnection();
 });
 
 // Increase timeout for database operations

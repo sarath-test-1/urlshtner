@@ -1,16 +1,16 @@
 const mongoose = require("mongoose");
-const Url = require("../models/Url");
-const User = require("../models/User");
-const Click = require("../models/Click");
+const Url = require("../../models/Url");
+const User = require("../../models/User");
+const Click = require("../../models/Click");
 const {
   cacheShortUrl,
   invalidateUrlCache,
   bulkInvalidateUrlCache,
-} = require("./cacheService");
-const { getRedisClient } = require("../config/redis");
-const { analyticsCleanupQueue } = require("../queues/analyticsCleanup.queue");
+} = require("../cacheService");
+const { getRedisClient } = require("../../config/redis");
+const { analyticsCleanupQueue } = require("../../queues/analyticsCleanup.queue");
 var base62 = require("base62-random");
-const logger = require("../utils/logger");
+const logger = require("../../utils/logger");
 
 class UrlService {
   /**

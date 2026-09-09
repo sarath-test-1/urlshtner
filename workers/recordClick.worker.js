@@ -1,7 +1,7 @@
 require("dotenv").config();
 const { Worker } = require("bullmq");
 const { connection } = require("../config/queueRedis");
-const UrlService = require("../services/urlService");
+const UrlService = require("../services/v1/urlService");
 
 new Worker(
   "record-click",

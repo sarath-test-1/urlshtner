@@ -39,6 +39,7 @@ const connectRedis = async () => {
       return client;
     }
   } catch (error) {
+    console.log('catched block of redis executed')
     console.error("Error connecting to Redis:", error.message);
     // Don't exit process, continue without cache
     return null;

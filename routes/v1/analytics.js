@@ -1,15 +1,15 @@
 const express = require("express");
-const AnalyticsController = require("../controllers/analyticsController");
-const { authenticateToken } = require("../middleware/auth");
-const { requireAdmin } = require("../middleware/rbac");
-const handleValidationErrors = require("../middleware/validation");
+const AnalyticsController = require("../../controllers/v1/analyticsController");
+const { authenticateToken } = require("../../middleware/auth");
+const { requireAdmin } = require("../../middleware/rbac");
+const handleValidationErrors = require("../../middleware/validation");
 const {
   analyticsLimiter,
   generalLimiter,
-} = require("../middleware/rateLimiter");
+} = require("../../middleware/rateLimiter");
 const {
   validateAnalyticsTimeRange,
-} = require("../request/validators/auth-validators");
+} = require("../../request/validators/v1/auth-validators");
 
 const router = express.Router();
 
