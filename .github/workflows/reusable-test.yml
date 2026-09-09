@@ -143,6 +143,7 @@ jobs:
           REDIS_USERNAME: default
           REDIS_PASSWORD: ci_test_redis_password
           REDIS_PROVIDER: local
+          BASE_URL: http://localhost:3000
 
       # ── Integration tests ─────────────────────────────────────────────────
       # Mongo: real single-node replica set started above, no auth.
