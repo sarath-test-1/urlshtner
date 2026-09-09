@@ -4,14 +4,10 @@ const User = require("../../models/User");
 const { recordClick } = require("../../services/v1/urlService");
 
 const {
-  createTestUser,
   createUserWithToken,
-  createAdminWithToken,
-  authHeader,
 } = require("../setup/testHelpers");
 const {
   createTestUrl,
-  createMultipleTestUrls,
 } = require("../setup/urlHelpers");
 
 describe("Click Recording", () => {

@@ -4,7 +4,6 @@ const cors = require("cors");
 const helmet = require("helmet");
 const path = require("path");
 const compression = require("compression");
-const logger = require("./utils/logger");
 const requestId = require("./middleware/requestId");
 const httpLogger = require("./middleware/httpLogger");
 const handleValidationErrors = require("./middleware/validation");
@@ -23,7 +22,6 @@ const UrlController = require("./controllers/v1/urlController");
 // Import middleware
 const {
   urlAccessLimiter,
-  generalLimiter,
 } = require("./middleware/rateLimiter");
 
 const { validateShortCode } = require("./request/validators/v1/url-validators");

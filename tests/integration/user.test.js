@@ -7,12 +7,8 @@ const {
   createTestUser,
   createUserWithToken,
   createAdminWithToken,
-  testUserData,
-  extractToken,
   authHeader,
 } = require("../setup/testHelpers");
-
-const { validatePaginationResponse } = require("../setup/urlHelpers");
 
 describe("User Endpoints", () => {
   describe("GET /api/v1/users/:id", () => {
@@ -702,11 +698,11 @@ describe("GET /api/v1/users", () => {
   it("should sort users by created_at descending (default)", async () => {
     const { token: adminToken } = await createAdminWithToken();
 
-    const user1 = await createTestUser({ email: "first@example.com" });
+    await createTestUser({ email: "first@example.com" });
     await new Promise((resolve) => setTimeout(resolve, 10));
-    const user2 = await createTestUser({ email: "second@example.com" });
+    await createTestUser({ email: "second@example.com" });
     await new Promise((resolve) => setTimeout(resolve, 10));
-    const user3 = await createTestUser({ email: "third@example.com" });
+    await createTestUser({ email: "third@example.com" });
 
     const response = await request(app)
       .get("/api/v1/users?sort_by=created_at&sort_order=desc")

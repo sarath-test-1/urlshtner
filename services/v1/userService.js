@@ -3,7 +3,6 @@ const User = require("../../models/User");
 const Click = require("../../models/Click");
 const Url = require("../../models/Url");
 const { getRedisClient } = require("../../config/redis");
-const logger = require("../../utils/logger");
 
 class UserService {
   /**
@@ -55,7 +54,9 @@ class UserService {
         },
       };
     } catch (error) {
-      throw new Error(`Failed to get users: ${error.message}`);
+      throw new Error(`Failed to get users: ${error.message}`, {
+        cause: error,
+      });
     }
   }
 
@@ -76,7 +77,9 @@ class UserService {
         throw error;
       }
 
-      throw new Error(`Failed to get user details: ${error.message}`);
+      throw new Error(`Failed to get user details: ${error.message}`, {
+        cause: error,
+      });
     }
   }
 
@@ -149,7 +152,9 @@ class UserService {
       return result;
     } catch (error) {
       if (error.message === "User not found") throw error;
-      throw new Error(`Failed to delete user: ${error.message}`);
+      throw new Error(`Failed to delete user: ${error.message}`, {
+        cause: error,
+      });
     } finally {
       await session.endSession();
     }

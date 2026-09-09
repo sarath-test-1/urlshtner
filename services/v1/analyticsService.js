@@ -211,7 +211,9 @@ class AnalyticsService {
 
       return analyticsData;
     } catch (error) {
-      throw new Error(`Failed to get user analytics: ${error.message}`);
+      throw new Error(`Failed to get user analytics: ${error.message}`, {
+        cause: error,
+      });
     }
   }
 
@@ -497,7 +499,9 @@ class AnalyticsService {
 
       return analytics;
     } catch (error) {
-      throw new Error(`Failed to get admin analytics: ${error.message}`);
+      throw new Error(`Failed to get admin analytics: ${error.message}`, {
+        cause: error,
+      });
     }
   }
 }

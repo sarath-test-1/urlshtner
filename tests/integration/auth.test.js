@@ -6,7 +6,6 @@ const {
   createTestUser,
   createUserWithToken,
   testUserData,
-  extractToken,
   authHeader,
 } = require("../setup/testHelpers");
 
@@ -225,7 +224,7 @@ describe("Auth Endpoints", () => {
 
     it("should return 401 for inactive user", async () => {
       // Create inactive user
-      const inactiveUser = await createTestUser({
+      await createTestUser({
         name: "inactive user",
         email: "inactive@example.com",
         password: "InactivePass&123",
@@ -369,7 +368,7 @@ describe("Auth Endpoints", () => {
 
   describe("POST /api/v1/auth/refresh", () => {
     it("should refresh access token with valid refresh token", async () => {
-      const { user, token } = await createUserWithToken();
+      const { user } = await createUserWithToken();
 
       // Generate refresh token
       const refreshToken = jwt.sign(

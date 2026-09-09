@@ -13,8 +13,5 @@ const isValidBase62 = (str) => {
 };
 
 module.exports = {
-  generateBase62,
-  encodeBase62,
-  decodeBase62,
   isValidBase62,
 };

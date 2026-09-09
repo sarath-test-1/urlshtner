@@ -20,8 +20,6 @@
 #     this ephemeral CI container — not a real secret — so it's inlined
 #     rather than stored as a GitHub secret. Happy to switch it to a repo
 #     secret if you'd rather.
-#   - No lint step yet — ESLint isn't set up in this project. Slot a
-#     "Run ESLint" step in before unit tests once you add one.
 #
 # HOW TO CALL THIS:
 #   jobs:
@@ -137,7 +135,9 @@ jobs:
             sleep 2
           done
 
-      # NOTE: no lint step yet — see header comment.
+      # ── Run ESLint ─────────────────────────────────────────────────────────
+      - name: Lint
+        run: npm run lint
 
       # ── Unit tests ─────────────────────────────────────────────────────────
       # NOTE: despite the name, these still need Mongo/Redis env vars —

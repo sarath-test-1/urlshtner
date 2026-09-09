@@ -2,7 +2,6 @@ const AnalyticsService = require("../../services/v1/analyticsService");
 const {
   successResponse,
   errorResponse,
-  validationErrorResponse,
   unauthorizedResponse,
 } = require("../../utils/apiResponse");
 

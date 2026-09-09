@@ -5,7 +5,6 @@ const { requireAdmin } = require("../../middleware/rbac");
 const handleValidationErrors = require("../../middleware/validation");
 const {
   analyticsLimiter,
-  generalLimiter,
 } = require("../../middleware/rateLimiter");
 const {
   validateAnalyticsTimeRange,

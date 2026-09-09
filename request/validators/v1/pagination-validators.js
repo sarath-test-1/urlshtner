@@ -1,4 +1,4 @@
-const { body, param, query } = require("express-validator");
+const { query } = require("express-validator");
 
 /**
  * Pagination validation

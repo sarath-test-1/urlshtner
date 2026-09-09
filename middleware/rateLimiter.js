@@ -78,7 +78,7 @@ const authLimiter = createRateLimiter({
   max: 50, // 5 attempts per 15 minutes, change to 5 later. TO DO
   message: "Too many authentication attempts, please try again later",
   skipSuccessfulRequests: true, // Don't count successful requests
-  keyGenerator: (req, res) => ipKeyGenerator(req.ip), // Safe IP handling
+  keyGenerator: (req, _res) => ipKeyGenerator(req.ip), // Safe IP handling
 });
 
 /**
@@ -109,7 +109,7 @@ const urlAccessLimiter = createRateLimiter({
 
   // req.ip alone is unsafe for IPv6.
   // ipKeyGenerator ensures consistent representation of IPs.
-  keyGenerator: (req, res) => ipKeyGenerator(req.ip), // Safe IP handling
+  keyGenerator: (req, _res) => ipKeyGenerator(req.ip), // Safe IP handling
 });
 
 /**

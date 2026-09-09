@@ -8,7 +8,6 @@ const {
   successResponse,
   listingSuccessResponse,
   errorResponse,
-  validationErrorResponse,
   notFoundResponse,
   unauthorizedResponse,
 } = require("../../utils/apiResponse");

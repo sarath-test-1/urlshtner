@@ -1,7 +1,6 @@
 const {
   forbiddenResponse,
   unauthorizedResponse,
-  validationErrorResponse,
   notFoundResponse,
   errorResponse,
 } = require("../utils/apiResponse");

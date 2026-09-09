@@ -3,7 +3,7 @@ const UserController = require("../../controllers/v1/userController");
 const { authenticateToken } = require("../../middleware/auth");
 const handleValidationErrors = require("../../middleware/validation");
 const { requireAdmin } = require("../../middleware/rbac");
-const { authLimiter } = require("../../middleware/rateLimiter");
+
 const {
   validateUserId,
   validateUserUpdate,
@@ -12,10 +12,6 @@ const {
   validatePagination,
 } = require("../../request/validators/v1/pagination-validators");
 const {
-  urlCreationLimiter,
-  urlAccessLimiter,
-  searchLimiter,
-  bulkOperationsLimiter,
   generalLimiter,
 } = require("../../middleware/rateLimiter");
 

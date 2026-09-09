@@ -1,12 +1,12 @@
 const request = require("supertest");
 const app = require("../../app");
-const Click = require("../../models/Click");
+// const Click = require("../../models/Click");
 const Url = require("../../models/Url");
+const User = require("../../models/User");
 const mongoose = require("mongoose");
 const jwt = require("jsonwebtoken");
 
 const {
-  createTestUser,
   createUserWithToken,
   createAdminWithToken,
   authHeader,
@@ -183,11 +183,11 @@ describe("URL Endpoints", () => {
     it("should sort URLs by created_at descending (default)", async () => {
       const { user, token } = await createUserWithToken();
 
-      const url1 = await createTestUrl(user._id, { shortCode: "first" });
+      await createTestUrl(user._id, { shortCode: "first" });
       await new Promise((resolve) => setTimeout(resolve, 10));
-      const url2 = await createTestUrl(user._id, { shortCode: "second" });
+      await createTestUrl(user._id, { shortCode: "second" });
       await new Promise((resolve) => setTimeout(resolve, 10));
-      const url3 = await createTestUrl(user._id, { shortCode: "third" });
+      await createTestUrl(user._id, { shortCode: "third" });
 
       const response = await request(app)
         .get("/api/v1/urls?sort_by=created_at&sort_order=desc")
@@ -834,7 +834,7 @@ describe("URL Endpoints", () => {
       //     userAgent: "Mozilla",
       //   });
 
-      const response = await request(app)
+      await request(app)
         .delete(`/api/v1/urls/${url._id}`)
         .set("Authorization", authHeader(token))
         .expect(204);
@@ -904,7 +904,7 @@ describe("URL Endpoints", () => {
         isActive: false,
       });
 
-      const response = await request(app)
+      await request(app)
         .delete(`/api/v1/urls/${url._id}`)
         .set("Authorization", authHeader(token))
         .expect(204);
@@ -923,7 +923,7 @@ describe("URL Endpoints", () => {
         expiresAt: pastDate,
       });
 
-      const response = await request(app)
+      await request(app)
         .delete(`/api/v1/urls/${url._id}`)
         .set("Authorization", authHeader(token))
         .expect(204);

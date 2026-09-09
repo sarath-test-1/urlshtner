@@ -32,7 +32,10 @@ async function cacheShortUrl(url) {
       await analyticsCleanupQueue.add("cleanup", {
         pattern: "analytics:admin:*",
       });
-    } catch (_) {}
+    } catch (_error) {
+      // Cache invalidation is best-effort.
+      // Do not fail the main operation if queue cleanup cannot be enqueued.
+    }
   } catch (err) {
     logger.warn({ message: "Redis cache error", error: err.message });
   }

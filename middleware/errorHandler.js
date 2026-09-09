@@ -6,7 +6,7 @@ const {
   validationErrorResponse,
 } = require("../utils/apiResponse");
 
-const errorHandler = (err, req, res, next) => {
+const errorHandler = (err, req, res, _next) => {
   // Normalize known Mongoose errors into AppError
   if (err instanceof mongoose.Error.CastError) {
     err = new AppError(`Invalid ${err.path}: ${err.value}`, 400, "INVALID_ID");
@@ -61,7 +61,7 @@ module.exports = errorHandler;
 
 // const logger = require("../utils/logger");
 
-// module.exports = (err, req, res, next) => {
+// module.exports = (err, req, res, _next) => {
 //   const statusCode = err.statusCode || 500;
 
 //   logger.error("Request failed", {

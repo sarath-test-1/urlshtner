@@ -2,7 +2,6 @@ const User = require("../../models/User");
 const { generateToken, generateRefreshToken } = require("../../middleware/auth");
 const { welcomeEmailQueue } = require("../../queues/welcomeEmail.queue");
 const { analyticsCleanupQueue } = require("../../queues/analyticsCleanup.queue");
-const logger = require("../../utils/logger");
 
 class AuthService {
   /**

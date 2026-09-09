@@ -174,7 +174,7 @@ describe("URL Redirect Endpoint", () => {
     // });
 
     it("should not redirect if shortCode is empty", async () => {
-      const response = await request(app).get("/").expect(404);
+        await request(app).get("/").expect(404);
     });
 
     it("should return 422 for invalid short code format", async () => {

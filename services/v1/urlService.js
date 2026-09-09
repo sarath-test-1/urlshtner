@@ -140,7 +140,9 @@ class UrlService {
       } catch (err) {
         // Retry only on duplicate shortCode
         if (err.code !== 11000) {
-          throw new Error(`Failed to create short URL: ${err.message}`);
+          throw new Error(`Failed to create short URL: ${err.message}`, {
+            cause: err,
+          });
         }
 
         // if it's a duplicate, you silently retry with no delay.
@@ -233,7 +235,9 @@ class UrlService {
         from_cache: false,
       };
     } catch (error) {
-      throw new Error(`Failed to get long URL: ${error.message}`);
+      throw new Error(`Failed to get long URL: ${error.message}`, {
+        cause: error,
+      });
     }
   }
 
@@ -369,7 +373,9 @@ class UrlService {
         },
       };
     } catch (error) {
-      throw new Error(`Failed to get user URLs: ${error.message}`);
+      throw new Error(`Failed to get user URLs: ${error.message}`, {
+        cause: error,
+      });
     }
   }
 
@@ -400,7 +406,9 @@ class UrlService {
 
       return url;
     } catch (error) {
-      throw new Error(`Failed to update URL: ${error.message}`);
+      throw new Error(`Failed to update URL: ${error.message}`, {
+        cause: error,
+      });
     }
   }
 
@@ -433,7 +441,9 @@ class UrlService {
 
       return { message: "URL deleted successfully" };
     } catch (error) {
-      throw new Error(`Failed to delete URL: ${error.message}`);
+      throw new Error(`Failed to delete URL: ${error.message}`, {
+        cause: error,
+      });
     } finally {
       await session.endSession();
     }
@@ -475,7 +485,9 @@ class UrlService {
         deletedCount: urls.length,
       };
     } catch (error) {
-      throw new Error(`Failed to bulk delete URLs: ${error.message}`);
+      throw new Error(`Failed to bulk delete URLs: ${error.message}`, {
+        cause: error,
+      });
     } finally {
       await session.endSession();
     }

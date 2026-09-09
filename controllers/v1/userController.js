@@ -1,10 +1,8 @@
-const User = require("../../models/User");
 const UserService = require("../../services/v1/userService");
 const {
   successResponse,
   listingSuccessResponse,
   errorResponse,
-  validationErrorResponse,
   notFoundResponse,
   unauthorizedResponse,
 } = require("../../utils/apiResponse");

@@ -2,7 +2,7 @@ const express = require("express");
 const AuthController = require("../../controllers/v1/authController");
 const { authenticateToken, verifyRefreshToken } = require("../../middleware/auth");
 const handleValidationErrors = require("../../middleware/validation");
-const { requireAdmin } = require("../../middleware/rbac");
+
 const {
   authLimiter,
   registrationLimiter,
