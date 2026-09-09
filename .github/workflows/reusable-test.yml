@@ -156,6 +156,11 @@ jobs:
           REDIS_PASSWORD: ci_test_redis_password
           REDIS_PROVIDER: local
           BASE_URL: http://localhost:3000
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          JWT_REFRESH_SECRET: ${{ secrets.JWT_REFRESH_SECRET }}
+          JWT_EXPIR: 7d
+          RATE_LIMIT_WINDOW_MS: 60000
+          RATE_LIMIT_MAX_REQUESTS: 10000
 
       # ── Integration tests ─────────────────────────────────────────────────
       # Mongo: real single-node replica set started above, no auth.
