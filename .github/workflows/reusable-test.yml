@@ -135,6 +135,14 @@ jobs:
       # Fully mocked (DB + Redis) — no service dependency.
       - name: Run unit tests
         run: npm run test:unit
+        env:
+          NODE_ENV: test
+          MONGODB_URI: "mongodb://127.0.0.1:27017/url_shortener_test?replicaSet=rs0"
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
+          REDIS_USERNAME: default
+          REDIS_PASSWORD: ci_test_redis_password
+          REDIS_PROVIDER: local
 
       # ── Integration tests ─────────────────────────────────────────────────
       # Mongo: real single-node replica set started above, no auth.
