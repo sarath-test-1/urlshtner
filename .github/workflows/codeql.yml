@@ -1,0 +1,50 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# codeql.yml — Static Application Security Testing (CodeQL)
+# ══════════════════════════════════════════════════════════════════════════════
+# Different from everything else in this pipeline: audit/Dependabot check
+# your DEPENDENCIES, Trivy checks the built IMAGE. This checks your own
+# source code for actual vulnerable patterns (injection, unsafe regex,
+# etc.) — free, built into GitHub, standard boilerplate.
+#
+# Runs on its own schedule + push/PR — independent of ci.yml entirely.
+
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Weekly scan even without new commits — picks up newly-disclosed
+    # vulnerability patterns in CodeQL's rule set.
+    - cron: "30 1 * * 0"
+
+jobs:
+  analyze:
+    name: Analyze
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        language: ["javascript"]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@v3

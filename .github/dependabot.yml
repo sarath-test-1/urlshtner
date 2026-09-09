@@ -1,0 +1,36 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# dependabot.yml — Automated dependency update PRs
+# ══════════════════════════════════════════════════════════════════════════════
+# Not a workflow — just config. GitHub itself opens PRs on this schedule
+# when a newer version of a tracked dependency exists. Pairs with the
+# `audit` job in ci.yml: audit catches known vulnerabilities in what's
+# already installed, Dependabot proactively keeps versions current so
+# fewer vulnerabilities accumulate in the first place.
+
+version: 2
+updates:
+  # npm dependencies (package.json / package-lock.json)
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    groups:
+      # Batch minor/patch bumps into one PR instead of one-per-package —
+      # keeps the PR list manageable on a solo project.
+      minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
+
+  # Base image in the Dockerfile (node:20-alpine)
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+
+  # Actions used in the workflow files themselves (actions/checkout@v4, etc.)
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"

@@ -2,21 +2,33 @@
 # ci.yml — Main CI Pipeline (url-shortener)
 # ══════════════════════════════════════════════════════════════════════════════
 #
-# PHASE 1 (this version): audit + test matrix.
-# Coming in later phases: docker-build job, coverage-gate job.
+# PHASE 3: adds coverage-gate + secrets-scan (Gitleaks) + Trivy image scan.
+# Coming in later phases: Docker Hub push (with approval gate), Dependabot
+# config, CodeQL.
 # deploy.yml is untouched — this workflow is CI-only, kept as a portfolio
 # reference alongside the simple Render deploy pipeline.
 #
-# PIPELINE OVERVIEW (Phase 1):
+# PIPELINE OVERVIEW:
 #
 #   [push / PR to main]
 #       │
-#       ├──────────────┐
-#       ▼              ▼
-#   ┌─────────┐   ┌───────────────────────────────────┐
-#   │  audit  │   │      test (matrix: Node 18/20/22)  │
-#   └─────────┘   │  install → unit → integration      │  ← calls reusable-test.yml
-#                 └─────────────────────────────────────┘
+#       ├──────────────┬──────────────────────┐
+#       ▼               ▼                      ▼
+#   ┌─────────┐   ┌──────────────┐   ┌─────────────────────────────────────┐
+#   │  audit  │   │ secrets-scan │   │  test (matrix: Node 18/20/22)        │
+#   └─────────┘   └──────────────┘   │  install → unit → integration        │  ← calls reusable-test.yml
+#                                    └──────────────────┬────────────────────┘
+#                                                        ▼
+#                                              ┌──────────────────┐
+#                                              │  coverage-gate   │
+#                                              └────────┬─────────┘
+#                                                        │
+#              (all of audit, secrets-scan, coverage-gate must pass)
+#                                                        ▼
+#                                          ┌───────────────────────────┐
+#                                          │  docker-build              │
+#                                          │  build → trivy scan → smoke│
+#                                          └─────────────────────────────┘
 
 name: CI
 
@@ -86,6 +98,29 @@ jobs:
         run: npm audit --omit=dev --audit-level=high
 
   # ════════════════════════════════════════════════════════════════════════════
+  # JOB: Secrets Scan (Gitleaks)
+  # ════════════════════════════════════════════════════════════════════════════
+  # Scans the working tree for committed secrets (API keys, passwords, etc.).
+  # --no-git: scans files as they are on disk for this checkout, not the
+  # full commit history — matches the reference Jenkins stage's approach.
+  # Runs in parallel with audit/test — independent, fast check.
+  secrets-scan:
+    name: Secrets Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Gitleaks secrets scan
+        run: |
+          docker run --rm \
+            -v ${{ github.workspace }}:/repo \
+            -w /repo \
+            zricethezav/gitleaks:latest \
+            detect --source=. --no-git -v
+
+  # ════════════════════════════════════════════════════════════════════════════
   # JOB 2: Test Matrix
   # ════════════════════════════════════════════════════════════════════════════
   test:
@@ -102,6 +137,24 @@ jobs:
     # No `secrets:` block — this app's Redis service container needs no
     # password, and Mongo is handled in-process via mongodb-memory-server.
     # (Reference project passed db-password here for its real Postgres.)
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # JOB: Coverage Gate
+  # ════════════════════════════════════════════════════════════════════════════
+  # After all matrix test jobs pass, this is a placeholder gate — actual
+  # coverage thresholds are enforced by Jest's coverageThreshold config
+  # (the test job would already have failed there if unmet). This job just
+  # confirms the matrix is green and gives a single check to require on PRs.
+  coverage-gate:
+    name: Coverage Gate
+    runs-on: ubuntu-latest
+    needs: [test]
+
+    steps:
+      - name: Check coverage threshold
+        run: |
+          echo "✅ All test jobs passed — coverage thresholds enforced by Jest config"
+          echo "Coverage reports available as job artifacts in the Actions UI"
 
   # ════════════════════════════════════════════════════════════════════════════
   # JOB 3: Docker Build
@@ -125,7 +178,10 @@ jobs:
   docker-build:
     name: Docker Build
     runs-on: ubuntu-latest
-    needs: [audit, test]
+    needs: [audit, test, secrets-scan, coverage-gate]
+
+    outputs:
+      app-version: ${{ steps.version.outputs.app-version }}
 
     if: |
       github.event.pull_request.draft == false &&
@@ -170,6 +226,20 @@ jobs:
             url-shortener:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # ── Trivy vulnerability scan ──────────────────────────────────────────
+      # Scans the built image itself — OS packages and base-image CVEs that
+      # npm audit can't see (it only looks at the JS dependency tree).
+      # Fails the build on HIGH/CRITICAL findings, same threshold as the
+      # reference Jenkins stage. Runs before the smoke test so we don't
+      # bother spinning up containers if the image itself is unsafe.
+      - name: Trivy vulnerability scan
+        run: |
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v trivy-cache:/root/.cache/ \
+            aquasec/trivy image --timeout 10m --severity HIGH,CRITICAL --exit-code 1 \
+            url-shortener:${{ github.sha }}
 
       # ── Start Redis (with auth) ───────────────────────────────────────────
       # Manual docker run, not `services:` — see reusable-test.yml's header
@@ -245,3 +315,67 @@ jobs:
           echo "| Git SHA | \`${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| Branch | ${{ github.ref_name }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Status | ✅ Build succeeded |" >> $GITHUB_STEP_SUMMARY
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # JOB: Docker Hub Push
+  # ════════════════════════════════════════════════════════════════════════════
+  # Only runs on an actual push to main (never on PRs — we don't want every
+  # PR publishing an image). Gated behind the `docker-hub-publish`
+  # GitHub Environment: this workflow YAML alone doesn't create the approval
+  # requirement — that's a repo setting. See setup note below.
+  #
+  # ⚠️ ONE-TIME SETUP REQUIRED (not part of this file):
+  #   1. Repo → Settings → Environments → New environment →
+  #      name it exactly "docker-hub-publish"
+  #   2. Under "Deployment protection rules", add yourself (or a team) as a
+  #      required reviewer. This is what makes the job pause and wait for
+  #      manual approval before running.
+  #   3. Repo → Settings → Secrets and variables → Actions → New repository
+  #      secret, twice: DOCKERHUB_USERNAME (your Docker Hub username) and
+  #      DOCKERHUB_TOKEN (a Docker Hub access token, not your password —
+  #      generate one at hub.docker.com → Account Settings → Security).
+  docker-push:
+    name: Docker Hub Push
+    runs-on: ubuntu-latest
+    needs: [docker-build]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    environment:
+      name: docker-hub-publish
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # Rebuilds from the same GHA layer cache docker-build already
+      # populated, so this is fast — not a from-scratch build. Actually
+      # pushes this time (push: true), unlike docker-build's local-only run.
+      - name: Build and push to Docker Hub
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/urlshtner1:${{ needs.docker-build.outputs.app-version }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/urlshtner1:${{ github.sha }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/urlshtner1:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Write job summary
+        run: |
+          echo "## 🚀 Docker Hub Push Summary" >> $GITHUB_STEP_SUMMARY
+          echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "| --- | --- |" >> $GITHUB_STEP_SUMMARY
+          echo "| Repo | \`${{ secrets.DOCKERHUB_USERNAME }}/urlshtner1\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Tags | ${{ needs.docker-build.outputs.app-version }}, ${{ github.sha }}, latest |" >> $GITHUB_STEP_SUMMARY
+          echo "| Status | ✅ Pushed |" >> $GITHUB_STEP_SUMMARY
