@@ -4,7 +4,7 @@
 # Plain Node/Express app, no build step (no TypeScript/webpack).
 # Single-stage is enough here — nothing to compile away.
 
-FROM node:20-alpine
+FROM node:26-alpine
 
 WORKDIR /app
 
