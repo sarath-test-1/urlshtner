@@ -38,7 +38,7 @@
   "author": "Sarath",
   "license": "MIT",
   "dependencies": {
-    "@bull-board/api": "^6.16.2",
+    "@bull-board/api": "^9.8.0",
     "@bull-board/express": "^6.16.2",
     "@logtail/winston": "^0.5.6",
     "@sentry/node": "^10.12.0",
